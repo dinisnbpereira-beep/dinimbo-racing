@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Axolotl GP — F1 Racing</title>
+<title>Dinimbo Racing</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; background: #123a1f; }
@@ -35,15 +35,6 @@ const TRACK_W = 72;
 // Control points are smoothed with a closed Catmull-Rom spline, then normalized
 // to fit the canvas. Point 0 is the start/finish line.
 const TRACKS = [
-  {
-    id: "dinimbo", name: "Dinimbo GP", flag: "🦎",
-    corners: "fast sweeper · hairpin · chicane ess",
-    pts: [
-      [200,620],[500,632],[760,600],[885,495],[905,375],[850,270],
-      [885,165],[790,88],[690,118],[638,212],[558,168],[478,240],
-      [378,198],[248,148],[118,240],[98,380],[148,505],
-    ],
-  },
   {
     id: "villeneuve", name: "Gilles Villeneuve", flag: "🇨🇦",
     corners: "Turn 1-2 · DSC corner · L'Épingle hairpin · final chicane",
@@ -382,7 +373,7 @@ function drawMenu() {
   ctx.fillStyle = "#fff";
   ctx.font = "bold 52px 'Trebuchet MS', sans-serif";
   ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 8;
-  ctx.fillText("AXOLOTL GP", W / 2, 92);
+  ctx.fillText("DINIMBO RACING", W / 2, 92);
   ctx.font = "16px 'Trebuchet MS', sans-serif";
   ctx.fillStyle = "#ffe066";
   ctx.fillText("choose your circuit", W / 2, 122);
