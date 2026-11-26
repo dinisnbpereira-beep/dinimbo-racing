@@ -20,7 +20,7 @@
 <body>
 <div id="wrap">
   <canvas id="game" width="1000" height="700"></canvas>
-  <div id="hint">W accelerate · S brake/reverse · A/D steer · R reset · T track menu</div>
+  <div id="hint">W accelerate · S brake/reverse · A/D steer · C change car · R reset · T track menu</div>
 </div>
 <script>
 (() => {
@@ -347,7 +347,8 @@ loadTrack(0);
 const keys = {};
 window.addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
-  if (["w","a","s","d","r","t","arrowup","arrowdown","arrowleft","arrowright","enter"," "].includes(k)) e.preventDefault();
+  if (["w","a","s","d","r","t","c","arrowup","arrowdown","arrowleft","arrowright","enter"," "].includes(k)) e.preventDefault();
+  if (k === "c") { carIdx = (carIdx + 1) % CARS.length; saveCar(); }
   if (state === "menu") {
     if (k === "arrowup") menuSel = 0;
     if (k === "arrowdown") menuSel = 1;
