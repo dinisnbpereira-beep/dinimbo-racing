@@ -29,54 +29,62 @@
 const cvs = document.getElementById("game");
 const ctx = cvs.getContext("2d");
 const W = cvs.width, H = cvs.height;
-const TRACK_W = 72;
+const TRACK_W = 64;
+const WORLD = 2000;              // max world dimension of a circuit
+const ZOOM = 1.9;                // follow-camera zoom
 
 // ---------------- circuits ----------------
-// Control points are smoothed with a closed Catmull-Rom spline, then normalized
-// to fit the canvas. Point 0 is the start/finish line.
+// Control points are traced from the real circuits' GPS centerlines
+// (bacinger/f1-circuits GeoJSON), resampled and relaxed so the wide arcade
+// track stays drivable, then normalized to a 2000px world. Point 0 is the
+// real start/finish line, listed in racing direction.
 const TRACKS = [
   {
     id: "villeneuve", name: "Gilles Villeneuve", flag: "🇨🇦",
     corners: "Casino straight · L'Épingle hairpin · Wall of Champions chicane",
     pts: [
-      [220,565],[480,570],[660,555],[790,515],[850,440],[850,350],
-      [790,285],[845,205],[790,120],[690,112],[600,150],[565,235],
-      [470,205],[330,190],[180,205],[95,250],[70,340],[130,415],
-      [60,470],[135,540],
+      [556.4,1448],[603.2,1683.4],[608.1,1887.1],[635.1,1972.8],[595.1,2000],[463.7,1953.6],
+      [356.5,1856.5],[299.7,1732],[175.2,1572.1],[139.9,1378.8],[50,1298.3],[16,1223.5],
+      [0,1045.9],[11,867.1],[52.3,694.9],[146.8,562.5],[189,421.7],[215,244.5],
+      [208.1,0],[400.4,522.2],[521.7,1107.5],[523.3,1272.3],
     ],
   },
   {
     id: "portimao", name: "Portimão", flag: "🇵🇹",
     corners: "climbing esses · hilltop sweepers · long right-hander onto the pit straight",
     pts: [
-      [620,640],[380,648],[205,620],[125,550],[102,462],
-      [128,382],[190,318],[200,245],[262,182],[340,138],
-      [430,110],[560,95],[680,110],[790,160],[850,230],
-      [865,310],[840,380],[790,430],[700,510],[580,580],[470,625],
+      [162.5,838.8],[11.1,311.6],[0,177],[106.7,43.3],[280.5,0],[409.2,62.9],
+      [314.6,217.7],[301.9,348.6],[536.8,1120.3],[574.1,1123.4],[599.7,1060.9],[614.9,823.2],
+      [493.7,418],[524.2,338.3],[612.3,278.1],[678,349.2],[779.8,818.7],[874.5,920.3],
+      [1075.2,1051.4],[1122.6,1120.4],[1094.7,1219.2],[851,1346.6],[777.8,1461.1],[757.4,1596.8],
+      [800.9,1672.5],[997.2,1538.8],[1064.5,1536.7],[1105.5,1590.1],[1100.9,1670.7],[1058.5,1752.5],
+      [857.2,1960.4],[678.4,2000],[590.1,1972.2],[487.3,1879.2],[412.1,1701.5],
     ],
   },
   {
     id: "suzuka", name: "Suzuka", flag: "🇯🇵",
     corners: "figure-8 crossover · S-Curves · Degner 1-2 · hairpin · Spoon · 130R",
     pts: [
-      [400,640],[640,635],[760,570],[800,500],
-      [770,430],[700,405],[670,330],[595,310],[565,240],[490,220],
-      [495,200],[465,270],[435,340],
-      [430,480],[448,518],[398,538],[462,545],
-      [530,535],[577,505],[558,450],[500,428],
-      [420,428],[360,430],
-      [305,435],[290,490],[310,548],[380,585],
+      [1718.3,568.4],[1985.4,906.2],[2000,983.5],[1965.2,1044.1],[1902.8,1039.7],[1795.1,914.8],
+      [1659.9,833.6],[1585.8,722.7],[1445.9,651.4],[1423.5,607.9],[1425.9,475.2],[1403.8,430.4],
+      [1361.3,398.4],[1281.2,375.6],[1198.9,386.7],[1126.2,429.4],[982.2,563.1],[878,580.3],
+      [821,543],[795.3,466],[768.9,295.1],[778.1,155.2],[755.8,158.5],[630.8,296.8],
+      [552.6,325.2],[467.6,324.5],[358.2,291],[286.4,244.7],[130.6,14.9],[58.8,0],
+      [2.7,39.2],[0,83.7],[25.3,128.3],[207.5,267.3],[501.8,389.2],[831.5,494.5],
+      [886.8,492.9],[965.9,463.5],[1191,295.4],[1338.7,263.2],[1419.5,268.9],[1534.8,348.5],
     ],
   },
   {
     id: "spa", name: "Spa-Francorchamps", flag: "🇧🇪",
     corners: "La Source · Eau Rouge · Kemmel straight · Les Combes · Pouhon · Blanchimont",
     pts: [
-      [235,572],[305,552],[355,570],[390,540],[430,470],
-      [505,390],[585,310],[655,240],[700,200],[745,185],
-      [790,215],[825,275],[838,345],[818,400],[848,458],
-      [840,515],[795,560],[725,592],[615,605],[505,608],
-      [400,628],[365,652],[310,642],[245,650],[215,630],[210,595],
+      [360.3,186.2],[284,47.8],[280.8,0],[359.8,19],[499.2,107.9],[802.6,428.8],
+      [1010.1,813.6],[1050.8,916.5],[1232.4,1582.7],[1200,1701.9],[1194.1,1804.2],[1171.4,1848],
+      [950.3,2000],[910.4,1999.3],[896.7,1953.3],[995.7,1844.2],[1000.6,1771.6],[912.6,1395.6],
+      [870,1332.8],[824.2,1311.2],[720.3,1317.3],[657.5,1363.5],[530.2,1637.8],[482.4,1696.2],
+      [315,1712.6],[156.4,1880],[111.6,1880.2],[66.4,1857.1],[0,1778.3],[5,1676.2],
+      [73.9,1558.1],[194.4,1444.5],[450.3,1281.8],[512.6,1191.6],[564.6,1064.3],[567.5,984.7],
+      [498.4,775],[472.8,639],[469.7,558.6],[498.2,440.5],
     ],
   },
 ];
@@ -102,8 +110,8 @@ function buildSamples(pts) {
     if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
     if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1];
   }
-  const sc = Math.min((W - 150) / (maxx - minx), (H - 150) / (maxy - miny));
-  const ox = (W - (maxx - minx) * sc) / 2, oy = (H - (maxy - miny) * sc) / 2;
+  const sc = WORLD / Math.max(maxx - minx, maxy - miny);
+  const ox = (WORLD - (maxx - minx) * sc) / 2, oy = (WORLD - (maxy - miny) * sc) / 2;
   return raw.map(p => [(p[0] - minx) * sc + ox, (p[1] - miny) * sc + oy]);
 }
 
@@ -112,6 +120,11 @@ let state = "menu";              // menu | race
 let trackIdx = 0;
 let samples = [], NS = 0;
 let particles = [];
+let worldB = { minx: 0, miny: 0, maxx: WORLD, maxy: WORLD };
+let blobs = [];
+let scenery = [];
+let stands = [];
+const cam = { x: WORLD / 2, y: WORLD / 2 };
 
 const car = {
   x: 0, y: 0, angle: 0, speed: 0,
@@ -127,10 +140,63 @@ function trackDir(i) {
   return Math.atan2(a[1] - b[1], a[0] - b[0]);
 }
 
+function distToTrack(x, y) {
+  let bd = Infinity;
+  for (const p of samples) {
+    const dx = x - p[0], dy = y - p[1];
+    const d = dx * dx + dy * dy;
+    if (d < bd) bd = d;
+  }
+  return Math.sqrt(bd);
+}
+
 function loadTrack(i) {
   trackIdx = i;
   samples = buildSamples(TRACKS[i].pts);
   NS = samples.length;
+  worldB = { minx: 0, miny: 0, maxx: WORLD, maxy: WORLD };
+  for (const p of samples) {
+    if (p[0] < worldB.minx) worldB.minx = p[0]; if (p[0] > worldB.maxx) worldB.maxx = p[0];
+    if (p[1] < worldB.miny) worldB.miny = p[1]; if (p[1] > worldB.maxy) worldB.maxy = p[1];
+  }
+  const M = 500;
+  worldB.minx -= M; worldB.miny -= M; worldB.maxx += M; worldB.maxy += M;
+  blobs = [];
+  for (let b = 0; b < 90; b++) {
+    blobs.push({
+      x: worldB.minx + Math.random() * (worldB.maxx - worldB.minx),
+      y: worldB.miny + Math.random() * (worldB.maxy - worldB.miny),
+      rx: 18 + Math.random() * 30, ry: 8 + Math.random() * 12,
+      a: Math.random() * Math.PI * 2,
+    });
+  }
+  scenery = [];
+  const clear = TRACK_W / 2 + 55;
+  for (let gx = worldB.minx + 80; gx < worldB.maxx - 80; gx += 150) {
+    for (let gy = worldB.miny + 80; gy < worldB.maxy - 80; gy += 150) {
+      const x = gx + (Math.random() - .5) * 110, y = gy + (Math.random() - .5) * 110;
+      if (distToTrack(x, y) < clear) continue;
+      if (Math.random() < 0.5) continue;
+      scenery.push({
+        type: Math.random() < 0.78 ? "tree" : "house",
+        x, y, s: 0.8 + Math.random() * 0.5, r: Math.random() * Math.PI * 2,
+        roof: ["#b5453a", "#8a5a3a", "#4a6a8a", "#7a4a6a"][Math.floor(Math.random() * 4)],
+      });
+    }
+  }
+  stands = [];
+  for (let k = 0; k < 4; k++) {
+    const i = Math.round(k * NS / 4) % NS;
+    const p = samples[i], d = trackDir(i);
+    const side = k % 2 ? 1 : -1;
+    const off = TRACK_W / 2 + 52;
+    stands.push({
+      x: p[0] + Math.cos(d + side * Math.PI / 2) * off,
+      y: p[1] + Math.sin(d + side * Math.PI / 2) * off,
+      a: d + (side < 0 ? Math.PI : 0),
+    });
+  }
+  cam.x = samples[0][0]; cam.y = samples[0][1];
   placeAtStart();
 }
 
@@ -198,8 +264,11 @@ function update() {
 
   car.x += Math.cos(car.angle) * car.speed;
   car.y += Math.sin(car.angle) * car.speed;
-  car.x = Math.max(10, Math.min(W - 10, car.x));
-  car.y = Math.max(10, Math.min(H - 10, car.y));
+  car.x = Math.max(worldB.minx + 20, Math.min(worldB.maxx - 20, car.x));
+  car.y = Math.max(worldB.miny + 20, Math.min(worldB.maxy - 20, car.y));
+
+  cam.x += (car.x - cam.x) * 0.15;
+  cam.y += (car.y - cam.y) * 0.15;
 
   const dist = findNearest();
   car.offTrack = dist > TRACK_W / 2 + 6;
@@ -238,14 +307,74 @@ function rr(x, y, w, h, r) {
   ctx.closePath();
 }
 
+function drawTree(o) {
+  ctx.save();
+  ctx.translate(o.x, o.y);
+  ctx.scale(o.s, o.s);
+  ctx.fillStyle = "rgba(0,0,0,.2)";
+  ctx.beginPath(); ctx.ellipse(3, 5, 16, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#6b4a2e";
+  ctx.fillRect(-3, -2, 6, 12);
+  ctx.fillStyle = "#2f6d35";
+  ctx.beginPath(); ctx.arc(0, -14, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#3d8a42";
+  ctx.beginPath(); ctx.arc(-6, -9, 9, 0, Math.PI * 2); ctx.arc(7, -8, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#4da553";
+  ctx.beginPath(); ctx.arc(-3, -18, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawHouse(o) {
+  ctx.save();
+  ctx.translate(o.x, o.y);
+  ctx.rotate(o.r);
+  ctx.scale(o.s, o.s);
+  ctx.fillStyle = "rgba(0,0,0,.2)";
+  ctx.beginPath(); ctx.ellipse(3, 5, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#e8d9c4";
+  ctx.fillRect(-13, -10, 26, 22);
+  ctx.fillStyle = o.roof;
+  ctx.beginPath();
+  ctx.moveTo(-16, -10); ctx.lineTo(0, -22); ctx.lineTo(16, -10);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#5a4632";
+  ctx.fillRect(-4, 2, 8, 10);
+  ctx.fillStyle = "#9ecbe8";
+  ctx.fillRect(6, -5, 6, 6); ctx.fillRect(-12, -5, 6, 6);
+  ctx.restore();
+}
+
+function drawStand(s) {
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate(s.a);
+  ctx.fillStyle = "rgba(0,0,0,.22)";
+  ctx.beginPath(); ctx.ellipse(6, 8, 62, 16, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#3a3a44";
+  rr(-55, -16, 110, 30, 5); ctx.fill();
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = i % 2 ? "#d94b4b" : "#f2f2f2";
+    ctx.fillRect(-52 + i * 17.5, -12, 14, 22);
+  }
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-55, 10, 110, 4);
+  ctx.restore();
+}
+
+function drawSceneryObjects() {
+  for (const s of stands) drawStand(s);
+  for (const o of scenery) {
+    if (o.type === "tree") drawTree(o);
+    else drawHouse(o);
+  }
+}
+
 function drawScenery() {
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "#3f8f4f"); g.addColorStop(1, "#2c6b3a");
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#2c6b3a";
+  ctx.fillRect(worldB.minx, worldB.miny, worldB.maxx - worldB.minx, worldB.maxy - worldB.miny);
   ctx.fillStyle = "#357a44";
-  for (let i = 0; i < 60; i++) {
-    const x = (i * 149) % W, y = (i * 233) % H;
-    ctx.beginPath(); ctx.ellipse(x, y, 26, 10, i, 0, Math.PI * 2); ctx.fill();
+  for (const b of blobs) {
+    ctx.beginPath(); ctx.ellipse(b.x, b.y, b.rx, b.ry, b.a, 0, Math.PI * 2); ctx.fill();
   }
 }
 
@@ -355,11 +484,11 @@ function drawTrackPreview(cx, cy, maxW, maxH) {
   ctx.beginPath();
   samples.forEach((p, i) => i ? ctx.lineTo(p[0] * sc + ox, p[1] * sc + oy) : ctx.moveTo(p[0] * sc + ox, p[1] * sc + oy));
   ctx.closePath();
-  ctx.lineWidth = 15; ctx.strokeStyle = "#d94b4b"; ctx.stroke();
-  ctx.lineWidth = 10; ctx.strokeStyle = "#3c3c44"; ctx.stroke();
+  ctx.lineWidth = 8; ctx.strokeStyle = "#d94b4b"; ctx.stroke();
+  ctx.lineWidth = 5; ctx.strokeStyle = "#3c3c44"; ctx.stroke();
   const s0 = samples[0];
   ctx.fillStyle = "#fff";
-  ctx.beginPath(); ctx.arc(s0[0] * sc + ox, s0[1] * sc + oy, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(s0[0] * sc + ox, s0[1] * sc + oy, 4, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = "#222"; ctx.lineWidth = 2; ctx.stroke();
   ctx.restore();
 }
@@ -464,9 +593,13 @@ function drawHUD() {
 }
 
 // ---------------- loop ----------------
-function frame() {
-  update();
+function drawWorld() {
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(ZOOM, ZOOM);
+  ctx.translate(-cam.x, -cam.y);
   drawScenery();
+  drawSceneryObjects();
   drawTrack();
   for (const p of particles) {
     ctx.globalAlpha = p.life / 22;
@@ -475,7 +608,40 @@ function frame() {
   }
   ctx.globalAlpha = 1;
   drawCar();
-  if (state === "menu") drawMenu(); else drawHUD();
+  ctx.restore();
+}
+
+function drawMinimap() {
+  const mw = 210, mh = 150, mx = W - mw - 16, my = H - mh - 42;
+  ctx.fillStyle = "rgba(10,15,25,.72)";
+  rr(mx, my, mw, mh, 10); ctx.fill();
+  let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+  for (const p of samples) {
+    if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
+    if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1];
+  }
+  const sc = Math.min((mw - 30) / (maxx - minx), (mh - 30) / (maxy - miny));
+  const ox = mx + (mw - (maxx - minx) * sc) / 2 - minx * sc;
+  const oy = my + (mh - (maxy - miny) * sc) / 2 - miny * sc;
+  ctx.save();
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.beginPath();
+  samples.forEach((p, i) => i ? ctx.lineTo(p[0] * sc + ox, p[1] * sc + oy) : ctx.moveTo(p[0] * sc + ox, p[1] * sc + oy));
+  ctx.closePath();
+  ctx.lineWidth = 3; ctx.strokeStyle = "#ffffff55"; ctx.stroke();
+  const s0 = samples[0];
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(s0[0] * sc + ox, s0[1] * sc + oy, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffe066";
+  ctx.beginPath(); ctx.arc(car.x * sc + ox, car.y * sc + oy, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#222"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+}
+
+function frame() {
+  update();
+  drawWorld();
+  if (state === "menu") drawMenu(); else { drawHUD(); drawMinimap(); }
   requestAnimationFrame(frame);
 }
 
