@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Axolotl GP — F1 Racing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #123a1f; }
+  body { display: flex; align-items: center; justify-content: center; font-family: "Trebuchet MS", "Segoe UI", sans-serif; }
+  #wrap { position: relative; }
+  canvas { display: block; border-radius: 14px; box-shadow: 0 18px 60px rgba(0,0,0,.55); }
+  #hint {
+    position: absolute; inset: auto 0 10px 0; text-align: center;
+    color: #ffffffcc; font-size: 13px; letter-spacing: .06em; pointer-events: none;
+    text-shadow: 0 2px 6px rgba(0,0,0,.6);
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="1000" height="700"></canvas>
+  <div id="hint">W accelerate · S brake/reverse · A/D steer · R reset — stay on the asphalt!</div>
+</div>
+<script>
+(() => {
+"use strict";
+
+const cvs = document.getElementById("game");
+const ctx = cvs.getContext("2d");
+const W = cvs.width, H = cvs.height;
+
+// ---------------- track ----------------
+const TRACK_W = 78;
+
+const CONTROL = [
+  [200, 620], [500, 632], [760, 600],
+  [885, 495], [905, 375], [850, 270],
+  [885, 165], [790, 88], [690, 118],
+  [638, 212], [558, 168], [478, 240],
+  [378, 198], [248, 148], [118, 240],
+  [98, 380], [148, 505],
+];
+
+function catmullRom(p0, p1, p2, p3, u) {
+  const u2 = u * u, u3 = u2 * u;
+  return [
+    0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * u + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * u2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * u3),
+    0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * u + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * u2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * u3),
+  ];
+}
+
+const SAMPLES = [];
+{
+  const n = CONTROL.length;
+  for (let i = 0; i < n; i++) {
+    const p0 = CONTROL[(i - 1 + n) % n], p1 = CONTROL[i], p2 = CONTROL[(i + 1) % n], p3 = CONTROL[(i + 2) % n];
+    const steps = i === 0 ? 40 : 32;
+    for (let s = 0; s < steps; s++) SAMPLES.push(catmullRom(p0, p1, p2, p3, s / steps));
+  }
+}
+const NS = SAMPLES.length;
+
+function trackDir(i) {
+  const a = SAMPLES[(i + 2) % NS], b = SAMPLES[(i - 2 + NS) % NS];
+  return Math.atan2(a[1] - b[1], a[0] - b[0]);
+}
+
+// ---------------- car ----------------
+const car = {
+  x: 0, y: 0, angle: 0, speed: 0,
+  nearest: 0, progress: 0, midPassed: false,
+  lap: 0, lapTime: 0, lastLap: 0, best: Number(localStorage.getItem("axolotl_gp_best") || 0),
+  started: false, offTrack: false, skid: 0,
+};
+
+function placeAtStart() {
+  car.nearest = 0;
+  car.x = SAMPLES[0][0]; car.y = SAMPLES[0][1];
+  car.angle = trackDir(0);
+  car.speed = 0; car.progress = 0; car.midPassed = false;
+  car.lap = 0; car.lapTime = 0; car.lastLap = 0;
+  car.started = false; car.skid = 0;
+}
+placeAtStart();
+
+// ---------------- input ----------------
+const keys = {};
+window.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (["w", "a", "s", "d", "r", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) e.preventDefault();
+  keys[k] = true;
+  if (k === "r") placeAtStart();
+});
+window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+// ---------------- helpers ----------------
+function findNearest() {
+  let best = car.nearest, bd = Infinity;
+  for (let off = -35; off <= 35; off++) {
+    const i = (car.nearest + off + NS) % NS;
+    const dx = car.x - SAMPLES[i][0], dy = car.y - SAMPLES[i][1];
+    const d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  car.nearest = best;
+  return Math.sqrt(bd);
+}
+
+// ---------------- update ----------------
+function update() {
+  if (keys["w"] || keys["arrowup"]) {
+    if (!car.started) car.started = true;
+    car.speed += car.offTrack ? 0.05 : 0.15;
+  } else if (keys["s"] || keys["arrowdown"]) {
+    car.speed -= car.speed > 0 ? 0.3 : 0.08;
+  } else {
+    car.speed *= 0.985;
+  }
+
+  const maxSpeed = car.offTrack ? 3.0 : 7.4;
+  car.speed = Math.max(-2.4, Math.min(maxSpeed, car.speed));
+
+  const steerInput = (keys["a"] || keys["arrowleft"] ? -1 : 0) + (keys["d"] || keys["arrowright"] ? 1 : 0);
+  const grip = Math.min(1, Math.abs(car.speed) / 2.2);
+  car.angle += steerInput * 0.05 * grip * (car.speed < 0 ? -1 : 1);
+  if (Math.abs(steerInput) > 0 && Math.abs(car.speed) > 4.5) car.skid = 6; else if (car.skid > 0) car.skid--;
+
+  car.x += Math.cos(car.angle) * car.speed;
+  car.y += Math.sin(car.angle) * car.speed;
+  car.x = Math.max(10, Math.min(W - 10, car.x));
+  car.y = Math.max(10, Math.min(H - 10, car.y));
+
+  const dist = findNearest();
+  car.offTrack = dist > TRACK_W / 2 + 6;
+  if (car.offTrack && Math.abs(car.speed) > 1 && Math.random() < 0.5) {
+    particles.push({ x: car.x, y: car.y, vx: (Math.random() - .5) * 2, vy: (Math.random() - .5) * 2, r: 2 + Math.random() * 3, life: 22, c: "#4c7a3a" });
+  }
+
+  const f = car.nearest / NS;
+  if (f > 0.4 && f < 0.6) car.midPassed = true;
+  if (car.started) {
+    car.lapTime += 1 / 60;
+    if (car.midPassed && f >= 0.95) {
+      car.midPassed = false;
+      car.lap++;
+      car.lastLap = car.lapTime;
+      if (!car.best || car.lapTime < car.best) { car.best = car.lapTime; localStorage.setItem("axolotl_gp_best", car.best); }
+      car.lapTime = 0;
+    }
+  }
+
+  for (const p of particles) { p.x += p.vx; p.y += p.vy; p.life--; }
+  particles = particles.filter(p => p.life > 0);
+}
+let particles = [];
+
+// ---------------- drawing ----------------
+function drawScenery() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#3f8f4f"); g.addColorStop(1, "#2c6b3a");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#357a44";
+  for (let i = 0; i < 60; i++) {
+    const x = (i * 149) % W, y = (i * 233) % H;
+    ctx.beginPath(); ctx.ellipse(x, y, 26, 10, i, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawTrack() {
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+
+  // kerbs: dashed red/white border
+  ctx.lineWidth = TRACK_W + 14;
+  ctx.strokeStyle = "#d94b4b";
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  SAMPLES.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.closePath(); ctx.stroke();
+  ctx.strokeStyle = "#f2f2f2";
+  ctx.setLineDash([26, 26]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // asphalt
+  ctx.lineWidth = TRACK_W;
+  ctx.strokeStyle = "#3c3c44";
+  ctx.beginPath();
+  SAMPLES.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.closePath(); ctx.stroke();
+
+  // center dashes
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#e8e8e866";
+  ctx.setLineDash([18, 30]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // start/finish checkers
+  const s = SAMPLES[0], d = trackDir(0);
+  ctx.save();
+  ctx.translate(s[0], s[1]); ctx.rotate(d);
+  const rows = 2, cols = 8, cell = TRACK_W / cols;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      ctx.fillStyle = (r + c) % 2 ? "#111" : "#fff";
+      ctx.fillRect(-cell + r * cell, -TRACK_W / 2 + c * cell, cell, cell);
+    }
+  }
+  ctx.restore();
+}
+
+function drawCar() {
+  ctx.save();
+  ctx.translate(car.x, car.y);
+
+  // shadow
+  ctx.save();
+  ctx.rotate(car.angle);
+  ctx.fillStyle = "rgba(0,0,0,.28)";
+  ctx.beginPath(); ctx.ellipse(0, 3, 19, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.rotate(car.angle);
+
+  // rear wing
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-19, -9, 5, 18);
+  // front wing
+  ctx.fillRect(14, -10, 4, 20);
+  // wheels
+  ctx.fillStyle = "#161616";
+  ctx.fillRect(-12, -11, 9, 6); ctx.fillRect(-12, 5, 9, 6);
+  ctx.fillRect(8, -11, 9, 6); ctx.fillRect(8, 5, 9, 6);
+  // body
+  const bg = ctx.createLinearGradient(0, -6, 0, 6);
+  bg.addColorStop(0, "#ffe066"); bg.addColorStop(1, "#e6a817");
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.moveTo(-16, -6); ctx.lineTo(6, -7); ctx.lineTo(15, -4);
+  ctx.lineTo(15, 4); ctx.lineTo(6, 7); ctx.lineTo(-16, 6);
+  ctx.closePath(); ctx.fill();
+  // cockpit + axolotl driver head
+  ctx.fillStyle = "#2b2b33";
+  ctx.beginPath(); ctx.ellipse(-4, 0, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffd94d";
+  ctx.beginPath(); ctx.arc(-4, 0, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#ff8fb2"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const by = -3 + i * 3;
+      ctx.beginPath();
+      ctx.moveTo(-7, by * 0.6);
+      ctx.lineTo(-10 - (i % 2), by + side * 1.5);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = "#3a2c00";
+  ctx.beginPath(); ctx.arc(-2.6, -1.3, 0.9, 0, Math.PI * 2); ctx.arc(-2.6, 1.3, 0.9, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+function fmt(t) {
+  if (!t) return "--:--.--";
+  const m = Math.floor(t / 60), s = t % 60;
+  return (m ? m + ":" : "") + s.toFixed(2).padStart(m ? 5 : 2, "0");
+}
+
+function drawHUD() {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  ctx.fillStyle = "rgba(10,15,25,.72)";
+  rr(14, 14, 250, 118, 12); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 20px 'Trebuchet MS', sans-serif";
+  ctx.fillText("LAP " + (car.lap + 1), 30, 44);
+  ctx.font = "bold 30px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = "#ffe066";
+  ctx.fillText(fmt(car.lapTime), 30, 78);
+  ctx.font = "15px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = "#ffffffcc";
+  ctx.fillText("last  " + fmt(car.lastLap), 30, 104);
+  ctx.fillText("best  " + fmt(car.best), 30, 124);
+
+  // speed readout
+  ctx.fillStyle = "rgba(10,15,25,.72)";
+  rr(W - 140, 14, 126, 54, 12); ctx.fill();
+  ctx.fillStyle = car.offTrack ? "#ff9a6b" : "#8ef2a2";
+  ctx.font = "bold 24px 'Trebuchet MS', sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(Math.round(Math.abs(car.speed) * 42) + " kph", W - 77, 48);
+  ctx.textAlign = "left";
+
+  if (car.offTrack) {
+    ctx.fillStyle = "#ffd94d";
+    ctx.font = "bold 18px 'Trebuchet MS', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("OFF TRACK — slow!", W / 2, 60);
+    ctx.textAlign = "left";
+  }
+
+  if (!car.started) {
+    ctx.fillStyle = "rgba(10,15,25,.6)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 48px 'Trebuchet MS', sans-serif";
+    ctx.fillText("AXOLOTL GP", W / 2, H / 2 - 40);
+    ctx.font = "22px 'Trebuchet MS', sans-serif";
+    ctx.fillText("WASD to drive — hit W to launch", W / 2, H / 2 + 8);
+    ctx.font = "16px 'Trebuchet MS', sans-serif";
+    ctx.fillStyle = "#ffe066";
+    ctx.fillText("hairpin up top · chicane mid-left · two big sweepers", W / 2, H / 2 + 44);
+    ctx.textAlign = "left";
+  }
+  ctx.restore();
+}
+
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function frame() {
+  update();
+  drawScenery();
+  drawTrack();
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / 22;
+    ctx.fillStyle = p.c;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  drawCar();
+  drawHUD();
+  requestAnimationFrame(frame);
+}
+
+frame();
+})();
+</script>
+</body>
+</html>
