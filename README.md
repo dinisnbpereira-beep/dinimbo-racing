@@ -1,6 +1,6 @@
 # Dinimbo Racing 🏎️🦎
 
-Race a yellow axolotl around an F1 circuit — hairpin, chicane, and big sweepers.
+Race a yellow axolotl around 5 F1 circuits — including Gilles Villeneuve, Portimão, Suzuka (figure-8!) and Spa-Francorchamps.
 
 ## Play
 Open `index.html` in any browser — no build step, no dependencies.

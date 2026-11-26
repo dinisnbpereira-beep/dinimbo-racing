@@ -20,7 +20,7 @@
 <body>
 <div id="wrap">
   <canvas id="game" width="1000" height="700"></canvas>
-  <div id="hint">W accelerate · S brake/reverse · A/D steer · R reset — stay on the asphalt!</div>
+  <div id="hint">W accelerate · S brake/reverse · A/D steer · R reset · T track menu</div>
 </div>
 <script>
 (() => {
@@ -29,19 +29,68 @@
 const cvs = document.getElementById("game");
 const ctx = cvs.getContext("2d");
 const W = cvs.width, H = cvs.height;
+const TRACK_W = 72;
 
-// ---------------- track ----------------
-const TRACK_W = 78;
-
-const CONTROL = [
-  [200, 620], [500, 632], [760, 600],
-  [885, 495], [905, 375], [850, 270],
-  [885, 165], [790, 88], [690, 118],
-  [638, 212], [558, 168], [478, 240],
-  [378, 198], [248, 148], [118, 240],
-  [98, 380], [148, 505],
+// ---------------- circuits ----------------
+// Control points are smoothed with a closed Catmull-Rom spline, then normalized
+// to fit the canvas. Point 0 is the start/finish line.
+const TRACKS = [
+  {
+    id: "dinimbo", name: "Dinimbo GP", flag: "🦎",
+    corners: "fast sweeper · hairpin · chicane ess",
+    pts: [
+      [200,620],[500,632],[760,600],[885,495],[905,375],[850,270],
+      [885,165],[790,88],[690,118],[638,212],[558,168],[478,240],
+      [378,198],[248,148],[118,240],[98,380],[148,505],
+    ],
+  },
+  {
+    id: "villeneuve", name: "Gilles Villeneuve", flag: "🇨🇦",
+    corners: "Turn 1-2 · DSC corner · L'Épingle hairpin · final chicane",
+    pts: [
+      [300,570],[660,555],[790,515],[850,440],[850,350],[790,285],
+      [845,205],[790,120],[690,112],[600,150],[565,235],[470,205],
+      [330,190],[180,205],[95,250],[70,340],[130,415],[60,470],[135,540],
+    ],
+  },
+  {
+    id: "portimao", name: "Portimão", flag: "🇵🇹",
+    corners: "downhill Turn 1 · high essess · long drop into the final sweeper",
+    pts: [
+      [220,570],[520,590],[760,560],[880,480],[900,380],
+      [840,280],[730,250],[640,285],[560,360],[450,400],[340,420],[240,385],
+      [160,320],[180,220],[280,150],[420,110],[560,130],[680,170],[740,250],
+      [720,340],[640,420],[530,462],[370,525],
+    ],
+  },
+  {
+    id: "suzuka", name: "Suzuka", flag: "🇯🇵",
+    corners: "S-Curves · Degner 1-2 · hairpin · Spoon · 130R · figure-8 crossover",
+    pts: [
+      [400,625],[640,620],[760,570],[800,500],
+      [770,430],[700,405],[670,330],[595,310],[565,240],[490,220],
+      [405,200],[375,270],[345,340],
+      [340,480],[358,518],[308,545],[372,552],
+      [440,540],[487,510],[468,455],[410,432],
+      [330,428],[268,424],
+      [225,432],[210,485],[228,548],[288,582],
+    ],
+  },
+  {
+    id: "spa", name: "Spa-Francorchamps", flag: "🇧🇪",
+    corners: "La Source · Eau Rouge · Kemmel straight · Les Combes · Pouhon · Stavelot · Blanchimont",
+    pts: [
+      [560,830],[880,810],[1030,780],[1092,715],[1108,630],
+      [1122,510],[1126,400],[1102,305],[1152,278],[1162,210],
+      [1092,155],[962,135],[822,150],[692,190],[588,250],
+      [512,335],[462,425],[468,510],[512,570],[492,628],
+      [532,672],[490,715],[430,715],[350,720],[270,700],
+      [210,705],[190,745],[215,790],[270,815],
+    ],
+  },
 ];
 
+// ---------------- spline ----------------
 function catmullRom(p0, p1, p2, p3, u) {
   const u2 = u * u, u3 = u2 * u;
   return [
@@ -50,47 +99,76 @@ function catmullRom(p0, p1, p2, p3, u) {
   ];
 }
 
-const SAMPLES = [];
-{
-  const n = CONTROL.length;
+function buildSamples(pts) {
+  const raw = [];
+  const n = pts.length;
   for (let i = 0; i < n; i++) {
-    const p0 = CONTROL[(i - 1 + n) % n], p1 = CONTROL[i], p2 = CONTROL[(i + 1) % n], p3 = CONTROL[(i + 2) % n];
-    const steps = i === 0 ? 40 : 32;
-    for (let s = 0; s < steps; s++) SAMPLES.push(catmullRom(p0, p1, p2, p3, s / steps));
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    for (let s = 0; s < 36; s++) raw.push(catmullRom(p0, p1, p2, p3, s / 36));
   }
+  let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+  for (const p of raw) {
+    if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
+    if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1];
+  }
+  const sc = Math.min((W - 150) / (maxx - minx), (H - 150) / (maxy - miny));
+  const ox = (W - (maxx - minx) * sc) / 2, oy = (H - (maxy - miny) * sc) / 2;
+  return raw.map(p => [(p[0] - minx) * sc + ox, (p[1] - miny) * sc + oy]);
 }
-const NS = SAMPLES.length;
+
+// ---------------- state ----------------
+let state = "menu";              // menu | race
+let trackIdx = 0;
+let samples = [], NS = 0;
+let particles = [];
+
+const car = {
+  x: 0, y: 0, angle: 0, speed: 0,
+  nearest: 0, midPassed: false,
+  lap: 0, lapTime: 0, lastLap: 0, best: 0,
+  started: false, offTrack: false,
+};
+
+function bestKey(i) { return "axolotl_gp_best_" + TRACKS[i].id; }
 
 function trackDir(i) {
-  const a = SAMPLES[(i + 2) % NS], b = SAMPLES[(i - 2 + NS) % NS];
+  const a = samples[(i + 2) % NS], b = samples[(i - 2 + NS) % NS];
   return Math.atan2(a[1] - b[1], a[0] - b[0]);
 }
 
-// ---------------- car ----------------
-const car = {
-  x: 0, y: 0, angle: 0, speed: 0,
-  nearest: 0, progress: 0, midPassed: false,
-  lap: 0, lapTime: 0, lastLap: 0, best: Number(localStorage.getItem("axolotl_gp_best") || 0),
-  started: false, offTrack: false, skid: 0,
-};
+function loadTrack(i) {
+  trackIdx = i;
+  samples = buildSamples(TRACKS[i].pts);
+  NS = samples.length;
+  placeAtStart();
+}
 
 function placeAtStart() {
   car.nearest = 0;
-  car.x = SAMPLES[0][0]; car.y = SAMPLES[0][1];
+  car.x = samples[0][0]; car.y = samples[0][1];
   car.angle = trackDir(0);
-  car.speed = 0; car.progress = 0; car.midPassed = false;
+  car.speed = 0; car.midPassed = false;
   car.lap = 0; car.lapTime = 0; car.lastLap = 0;
-  car.started = false; car.skid = 0;
+  car.started = false;
+  car.best = Number(localStorage.getItem(bestKey(trackIdx)) || 0);
+  particles = [];
 }
-placeAtStart();
+loadTrack(0);
 
 // ---------------- input ----------------
 const keys = {};
 window.addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
-  if (["w", "a", "s", "d", "r", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) e.preventDefault();
+  if (["w","a","s","d","r","t","arrowup","arrowdown","arrowleft","arrowright","enter"," "].includes(k)) e.preventDefault();
+  if (state === "menu") {
+    if (k === "a" || k === "arrowleft") { loadTrack((trackIdx + TRACKS.length - 1) % TRACKS.length); }
+    if (k === "d" || k === "arrowright") { loadTrack((trackIdx + 1) % TRACKS.length); }
+    if (k === "w" || k === "arrowup" || k === "enter" || k === " ") { state = "race"; placeAtStart(); }
+    return;
+  }
   keys[k] = true;
   if (k === "r") placeAtStart();
+  if (k === "t" || k === "escape") { state = "menu"; placeAtStart(); }
 });
 window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
@@ -99,7 +177,7 @@ function findNearest() {
   let best = car.nearest, bd = Infinity;
   for (let off = -35; off <= 35; off++) {
     const i = (car.nearest + off + NS) % NS;
-    const dx = car.x - SAMPLES[i][0], dy = car.y - SAMPLES[i][1];
+    const dx = car.x - samples[i][0], dy = car.y - samples[i][1];
     const d = dx * dx + dy * dy;
     if (d < bd) { bd = d; best = i; }
   }
@@ -109,6 +187,8 @@ function findNearest() {
 
 // ---------------- update ----------------
 function update() {
+  if (state !== "race") return;
+
   if (keys["w"] || keys["arrowup"]) {
     if (!car.started) car.started = true;
     car.speed += car.offTrack ? 0.05 : 0.15;
@@ -124,7 +204,6 @@ function update() {
   const steerInput = (keys["a"] || keys["arrowleft"] ? -1 : 0) + (keys["d"] || keys["arrowright"] ? 1 : 0);
   const grip = Math.min(1, Math.abs(car.speed) / 2.2);
   car.angle += steerInput * 0.05 * grip * (car.speed < 0 ? -1 : 1);
-  if (Math.abs(steerInput) > 0 && Math.abs(car.speed) > 4.5) car.skid = 6; else if (car.skid > 0) car.skid--;
 
   car.x += Math.cos(car.angle) * car.speed;
   car.y += Math.sin(car.angle) * car.speed;
@@ -145,7 +224,10 @@ function update() {
       car.midPassed = false;
       car.lap++;
       car.lastLap = car.lapTime;
-      if (!car.best || car.lapTime < car.best) { car.best = car.lapTime; localStorage.setItem("axolotl_gp_best", car.best); }
+      if (!car.best || car.lapTime < car.best) {
+        car.best = car.lapTime;
+        localStorage.setItem(bestKey(trackIdx), car.best);
+      }
       car.lapTime = 0;
     }
   }
@@ -153,9 +235,18 @@ function update() {
   for (const p of particles) { p.x += p.vx; p.y += p.vy; p.life--; }
   particles = particles.filter(p => p.life > 0);
 }
-let particles = [];
 
 // ---------------- drawing ----------------
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 function drawScenery() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, "#3f8f4f"); g.addColorStop(1, "#2c6b3a");
@@ -167,37 +258,35 @@ function drawScenery() {
   }
 }
 
+function pathSamples() {
+  ctx.beginPath();
+  samples.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.closePath();
+}
+
 function drawTrack() {
   ctx.lineJoin = "round"; ctx.lineCap = "round";
 
-  // kerbs: dashed red/white border
   ctx.lineWidth = TRACK_W + 14;
   ctx.strokeStyle = "#d94b4b";
   ctx.setLineDash([]);
-  ctx.beginPath();
-  SAMPLES.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-  ctx.closePath(); ctx.stroke();
+  pathSamples(); ctx.stroke();
   ctx.strokeStyle = "#f2f2f2";
   ctx.setLineDash([26, 26]);
-  ctx.stroke();
+  pathSamples(); ctx.stroke();
   ctx.setLineDash([]);
 
-  // asphalt
   ctx.lineWidth = TRACK_W;
   ctx.strokeStyle = "#3c3c44";
-  ctx.beginPath();
-  SAMPLES.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-  ctx.closePath(); ctx.stroke();
+  pathSamples(); ctx.stroke();
 
-  // center dashes
   ctx.lineWidth = 3;
   ctx.strokeStyle = "#e8e8e866";
   ctx.setLineDash([18, 30]);
-  ctx.stroke();
+  pathSamples(); ctx.stroke();
   ctx.setLineDash([]);
 
-  // start/finish checkers
-  const s = SAMPLES[0], d = trackDir(0);
+  const s = samples[0], d = trackDir(0);
   ctx.save();
   ctx.translate(s[0], s[1]); ctx.rotate(d);
   const rows = 2, cols = 8, cell = TRACK_W / cols;
@@ -214,7 +303,6 @@ function drawCar() {
   ctx.save();
   ctx.translate(car.x, car.y);
 
-  // shadow
   ctx.save();
   ctx.rotate(car.angle);
   ctx.fillStyle = "rgba(0,0,0,.28)";
@@ -223,16 +311,12 @@ function drawCar() {
 
   ctx.rotate(car.angle);
 
-  // rear wing
   ctx.fillStyle = "#222";
   ctx.fillRect(-19, -9, 5, 18);
-  // front wing
   ctx.fillRect(14, -10, 4, 20);
-  // wheels
   ctx.fillStyle = "#161616";
   ctx.fillRect(-12, -11, 9, 6); ctx.fillRect(-12, 5, 9, 6);
   ctx.fillRect(8, -11, 9, 6); ctx.fillRect(8, 5, 9, 6);
-  // body
   const bg = ctx.createLinearGradient(0, -6, 0, 6);
   bg.addColorStop(0, "#ffe066"); bg.addColorStop(1, "#e6a817");
   ctx.fillStyle = bg;
@@ -240,7 +324,6 @@ function drawCar() {
   ctx.moveTo(-16, -6); ctx.lineTo(6, -7); ctx.lineTo(15, -4);
   ctx.lineTo(15, 4); ctx.lineTo(6, 7); ctx.lineTo(-16, 6);
   ctx.closePath(); ctx.fill();
-  // cockpit + axolotl driver head
   ctx.fillStyle = "#2b2b33";
   ctx.beginPath(); ctx.ellipse(-4, 0, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#ffd94d";
@@ -267,9 +350,76 @@ function fmt(t) {
   return (m ? m + ":" : "") + s.toFixed(2).padStart(m ? 5 : 2, "0");
 }
 
-function drawHUD() {
+function drawTrackPreview(cx, cy, maxW, maxH) {
+  let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+  for (const p of samples) {
+    if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
+    if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1];
+  }
+  const sc = Math.min(maxW / (maxx - minx), maxH / (maxy - miny));
+  const ox = cx - (maxx - minx) * sc / 2 - minx * sc;
+  const oy = cy - (maxy - miny) * sc / 2 - miny * sc;
   ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.beginPath();
+  samples.forEach((p, i) => i ? ctx.lineTo(p[0] * sc + ox, p[1] * sc + oy) : ctx.moveTo(p[0] * sc + ox, p[1] * sc + oy));
+  ctx.closePath();
+  ctx.lineWidth = 15; ctx.strokeStyle = "#d94b4b"; ctx.stroke();
+  ctx.lineWidth = 10; ctx.strokeStyle = "#3c3c44"; ctx.stroke();
+  const s0 = samples[0];
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(s0[0] * sc + ox, s0[1] * sc + oy, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#222"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+}
+
+function drawMenu() {
+  const trk = TRACKS[trackIdx];
+  ctx.fillStyle = "rgba(8,14,24,.78)";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 52px 'Trebuchet MS', sans-serif";
+  ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 8;
+  ctx.fillText("AXOLOTL GP", W / 2, 92);
+  ctx.font = "16px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = "#ffe066";
+  ctx.fillText("choose your circuit", W / 2, 122);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 38px 'Trebuchet MS', sans-serif";
+  ctx.fillText(trk.flag + "  " + trk.name, W / 2, 182);
+  ctx.font = "15px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = "#ffffffcc";
+  ctx.fillText(trk.corners, W / 2, 212);
+
+  ctx.fillStyle = "rgba(255,255,255,.06)";
+  rr(W / 2 - 200, 240, 400, 240, 16); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.lineWidth = 2;
+  rr(W / 2 - 200, 240, 400, 240, 16); ctx.stroke();
+  drawTrackPreview(W / 2, 360, 340, 200);
+
+  ctx.font = "bold 20px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = "#8ef2a2";
+  ctx.fillText("best lap   " + fmt(car.best), W / 2, 512);
+
+  ctx.font = "17px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = "#fff";
+  ctx.fillText("◀  A / D  ▶   switch track", W / 2, 566);
+  ctx.fillStyle = "#ffe066";
+  ctx.font = "bold 19px 'Trebuchet MS', sans-serif";
+  ctx.fillText("press W to race", W / 2, 604);
+
+  ctx.font = "13px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = "#ffffff99";
+  ctx.fillText("circuit " + (trackIdx + 1) + " / " + TRACKS.length + "   ·   in race: R reset · T menu", W / 2, 650);
+  ctx.textAlign = "left";
+}
+
+function drawHUD() {
+  const trk = TRACKS[trackIdx];
 
   ctx.fillStyle = "rgba(10,15,25,.72)";
   rr(14, 14, 250, 118, 12); ctx.fill();
@@ -284,12 +434,17 @@ function drawHUD() {
   ctx.fillText("last  " + fmt(car.lastLap), 30, 104);
   ctx.fillText("best  " + fmt(car.best), 30, 124);
 
-  // speed readout
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(10,15,25,.72)";
+  rr(W / 2 - 130, 14, 260, 40, 12); ctx.fill();
+  ctx.font = "bold 17px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(trk.flag + " " + trk.name, W / 2, 40);
+
   ctx.fillStyle = "rgba(10,15,25,.72)";
   rr(W - 140, 14, 126, 54, 12); ctx.fill();
   ctx.fillStyle = car.offTrack ? "#ff9a6b" : "#8ef2a2";
   ctx.font = "bold 24px 'Trebuchet MS', sans-serif";
-  ctx.textAlign = "center";
   ctx.fillText(Math.round(Math.abs(car.speed) * 42) + " kph", W - 77, 48);
   ctx.textAlign = "left";
 
@@ -297,7 +452,7 @@ function drawHUD() {
     ctx.fillStyle = "#ffd94d";
     ctx.font = "bold 18px 'Trebuchet MS', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("OFF TRACK — slow!", W / 2, 60);
+    ctx.fillText("OFF TRACK — slow!", W / 2, 76);
     ctx.textAlign = "left";
   }
 
@@ -306,28 +461,18 @@ function drawHUD() {
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 48px 'Trebuchet MS', sans-serif";
-    ctx.fillText("AXOLOTL GP", W / 2, H / 2 - 40);
-    ctx.font = "22px 'Trebuchet MS', sans-serif";
-    ctx.fillText("WASD to drive — hit W to launch", W / 2, H / 2 + 8);
-    ctx.font = "16px 'Trebuchet MS', sans-serif";
+    ctx.font = "bold 40px 'Trebuchet MS', sans-serif";
+    ctx.fillText(trk.flag + " " + trk.name, W / 2, H / 2 - 40);
+    ctx.font = "20px 'Trebuchet MS', sans-serif";
+    ctx.fillText("hit W to launch", W / 2, H / 2 + 6);
+    ctx.font = "15px 'Trebuchet MS', sans-serif";
     ctx.fillStyle = "#ffe066";
-    ctx.fillText("hairpin up top · chicane mid-left · two big sweepers", W / 2, H / 2 + 44);
+    ctx.fillText(trk.corners, W / 2, H / 2 + 40);
     ctx.textAlign = "left";
   }
-  ctx.restore();
 }
 
-function rr(x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
+// ---------------- loop ----------------
 function frame() {
   update();
   drawScenery();
@@ -339,7 +484,7 @@ function frame() {
   }
   ctx.globalAlpha = 1;
   drawCar();
-  drawHUD();
+  if (state === "menu") drawMenu(); else drawHUD();
   requestAnimationFrame(frame);
 }
 
