@@ -170,6 +170,10 @@ const TRACKS = [
     id: "australia", name: "Albert Park", flag: "\ud83c\udde6\ud83c\uddfa",
     corners: "lakeside parkland · fast Turn 1-2 chicane · flat-out sweepers",
     theme: "australia",
+    lake: [
+      [590,620],[700,560],[810,580],[810,680],[790,800],[770,940],[740,1090],
+      [680,1230],[600,1330],[530,1300],[490,1170],[480,1000],[495,830],[520,700],
+    ],
     pts: [
       [627.3,1479.9],[410.2,1253.6],[350,1030.1],[98,740.2],[0,551.9],[15.9,511.6],
       [118.4,431.5],[139.3,252.2],[183.3,177],[313.9,87.7],[545.3,0],[777.3,67.3],
@@ -217,6 +221,7 @@ function buildSamples(pts) {
   }
   const sc = WORLD / Math.max(maxx - minx, maxy - miny);
   const ox = (WORLD - (maxx - minx) * sc) / 2, oy = (WORLD - (maxy - miny) * sc) / 2;
+  lastNorm = { minx, miny, sc, ox, oy };
   return raw.map(p => [(p[0] - minx) * sc + ox, (p[1] - miny) * sc + oy]);
 }
 
@@ -229,6 +234,8 @@ let worldB = { minx: 0, miny: 0, maxx: WORLD, maxy: WORLD };
 let blobs = [];
 let scenery = [];
 let stands = [];
+let lakePath = [];
+let lastNorm = null;
 let curTheme = THEMES.canada;
 
 // ---------------- cars ----------------
@@ -268,11 +275,38 @@ function distToTrack(x, y) {
   return Math.sqrt(bd);
 }
 
+function makeBlob(pts, seg) {
+  const raw = [];
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    for (let s = 0; s < seg; s++) raw.push(catmullRom(p0, p1, p2, p3, s / seg));
+  }
+  return raw;
+}
+
+function inLake(x, y) {
+  if (!lakePath.length) return false;
+  let inside = false;
+  for (let a = 0, b = lakePath.length - 1; a < lakePath.length; b = a++) {
+    const p = lakePath[a], q = lakePath[b];
+    if ((p[1] > y) !== (q[1] > y) && x < (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1]) + p[0]) inside = !inside;
+  }
+  return inside;
+}
+
 function loadTrack(i) {
   trackIdx = i;
   curTheme = THEMES[TRACKS[i].theme];
   samples = buildSamples(TRACKS[i].pts);
   NS = samples.length;
+  lakePath = [];
+  if (TRACKS[i].lake) {
+    const t = lastNorm;
+    lakePath = makeBlob(TRACKS[i].lake, 14).map(p => [
+      (p[0] - t.minx) * t.sc + t.ox, (p[1] - t.miny) * t.sc + t.oy,
+    ]);
+  }
   worldB = { minx: 0, miny: 0, maxx: WORLD, maxy: WORLD };
   for (const p of samples) {
     if (p[0] < worldB.minx) worldB.minx = p[0]; if (p[0] > worldB.maxx) worldB.maxx = p[0];
@@ -295,6 +329,7 @@ function loadTrack(i) {
     for (let gy = worldB.miny + 80; gy < worldB.maxy - 80; gy += 150) {
       const x = gx + (Math.random() - .5) * 110, y = gy + (Math.random() - .5) * 110;
       if (distToTrack(x, y) < clear) continue;
+      if (inLake(x, y)) continue;
       if (Math.random() < 0.5) continue;
       const r = Math.random();
       let type;
@@ -319,11 +354,17 @@ function loadTrack(i) {
   for (let k = 0; k < 4; k++) {
     const i = Math.round(k * NS / 4) % NS;
     const p = samples[i], d = trackDir(i);
-    const side = k % 2 ? 1 : -1;
+    let side = k % 2 ? 1 : -1;
     const off = TRACK_W / 2 + 52;
+    let sx = p[0] + Math.cos(d + side * Math.PI / 2) * off;
+    let sy = p[1] + Math.sin(d + side * Math.PI / 2) * off;
+    if (inLake(sx, sy)) {
+      side = -side;
+      sx = p[0] + Math.cos(d + side * Math.PI / 2) * off;
+      sy = p[1] + Math.sin(d + side * Math.PI / 2) * off;
+    }
     stands.push({
-      x: p[0] + Math.cos(d + side * Math.PI / 2) * off,
-      y: p[1] + Math.sin(d + side * Math.PI / 2) * off,
+      x: sx, y: sy,
       a: d + (side < 0 ? Math.PI : 0),
     });
   }
@@ -568,6 +609,24 @@ function drawStand(s) {
   ctx.restore();
 }
 
+function drawLake() {
+  if (!lakePath.length) return;
+  ctx.fillStyle = "#3f7fb5";
+  ctx.beginPath();
+  lakePath.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "#2f6391"; ctx.lineWidth = 4; ctx.stroke();
+  let cx = 0, cy = 0;
+  for (const p of lakePath) { cx += p[0]; cy += p[1]; }
+  cx /= lakePath.length; cy /= lakePath.length;
+  ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 2; ctx.lineCap = "round";
+  for (let j = 0; j < 3; j++) {
+    ctx.beginPath();
+    ctx.arc(cx - 34 + j * 34, cy - 26 + j * 28, 11, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
+  }
+}
+
 function drawSceneryObjects() {
   for (const s of stands) drawStand(s);
   for (const o of scenery) {
@@ -749,7 +808,21 @@ function drawMenu() {
   rr(W / 2 - 200, 240, 400, 240, 16); ctx.fill();
   ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.lineWidth = 2;
   rr(W / 2 - 200, 240, 400, 240, 16); ctx.stroke();
-  drawTrackPreview(W / 2, 360, 340, 200);
+  drawTrackPreview(W / 2, 350, 340, 185);
+
+  ctx.font = "20px 'Trebuchet MS', sans-serif";
+  for (let i = 0; i < TRACKS.length; i++) {
+    const fx = W / 2 + (i - (TRACKS.length - 1) / 2) * 46;
+    ctx.globalAlpha = i === trackIdx ? 1 : 0.4;
+    ctx.fillStyle = "#fff";
+    ctx.fillText(TRACKS[i].flag, fx, 472);
+    if (i === trackIdx) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#ffe066"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(fx, 465, 14, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
 
   ctx.font = "bold 20px 'Trebuchet MS', sans-serif";
   ctx.fillStyle = "#8ef2a2";
@@ -847,6 +920,7 @@ function drawWorld() {
   ctx.scale(ZOOM, ZOOM);
   ctx.translate(-cam.x, -cam.y);
   drawScenery();
+  drawLake();
   drawSceneryObjects();
   drawTrack();
   for (const p of particles) {
