@@ -827,6 +827,15 @@ function drawHUD() {
     ctx.font = "15px 'Trebuchet MS', sans-serif";
     ctx.fillStyle = "#ffe066";
     ctx.fillText(trk.corners, W / 2, H / 2 + 40);
+
+    drawCarPreview(W / 2 - 90, H / 2 + 88, 1.25);
+    ctx.textAlign = "left";
+    ctx.font = "bold 17px 'Trebuchet MS', sans-serif";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(CARS[carIdx].name, W / 2 - 45, H / 2 + 84);
+    ctx.font = "14px 'Trebuchet MS', sans-serif";
+    ctx.fillStyle = "#ffe066";
+    ctx.fillText("press C to change car", W / 2 - 45, H / 2 + 106);
     ctx.textAlign = "left";
   }
 }
