@@ -5,7 +5,7 @@ Race an axolotl around 7 real F1 circuits, with layouts traced from the circuits
 Pick your car in the menu: Yellow, Red, Sky & Silver, Orange or Navy — each with a matching axolotl driver.
 
 ## Play
-Open `index.html` in any browser — no build step, no dependencies. Best played via GitHub Pages.
+Open it in a browser, or install it as an app: on iPhone/iPad tap Share → Add to Home Screen; on Android Chrome tap ⋮ → Install app; on desktop Chrome/Edge use the install icon in the address bar. Works offline once installed.
 
 ## Controls
 - **W** — accelerate
