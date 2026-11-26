@@ -17,7 +17,37 @@
   html, body { height: 100%; overflow: hidden; background: #123a1f; }
   body { display: flex; align-items: center; justify-content: center; font-family: "Trebuchet MS", "Segoe UI", sans-serif; background: #123a1f; }
   #wrap { position: relative; }
-  canvas { display: block; border-radius: 14px; box-shadow: 0 18px 60px rgba(0,0,0,.55); }
+  canvas {
+    display: block;
+    border-radius: 14px; box-shadow: 0 18px 60px rgba(0,0,0,.55);
+    width: min(100vw, calc(100vh * 10 / 7));
+    height: min(100vh, calc(100vw * 7 / 10));
+    touch-action: none;
+  }
+  @supports (width: 100dvh) {
+    canvas {
+      width: min(100vw, calc(100dvh * 10 / 7));
+      height: min(100dvh, calc(100vw * 7 / 10));
+    }
+  }
+  #pads { position: absolute; inset: 0; display: none; pointer-events: none; }
+  #wrap.touch #pads { display: block; }
+  #wrap.touch #hint { display: none; }
+  .btn {
+    position: absolute; pointer-events: auto;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; background: rgba(255,255,255,.10);
+    border: 2px solid rgba(255,255,255,.30); color: #fff;
+    font-weight: bold; user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  .btn.on { background: rgba(255,224,102,.38); border-color: #ffe066; }
+  #b-left { left: 16px; bottom: 24px; width: 74px; height: 74px; font-size: 26px; }
+  #b-right { left: 104px; bottom: 24px; width: 74px; height: 74px; font-size: 26px; }
+  #b-gas { right: 16px; bottom: 24px; width: 84px; height: 84px; font-size: 26px; }
+  #b-brake { right: 116px; bottom: 24px; width: 62px; height: 62px; font-size: 20px; }
+  #b-car { right: 16px; top: 80px; width: 44px; height: 44px; font-size: 15px; }
+  #b-reset { right: 16px; top: 134px; width: 44px; height: 44px; font-size: 15px; }
+  #b-menu { right: 16px; top: 188px; width: 44px; height: 44px; font-size: 15px; }
   #hint {
     position: absolute; inset: auto 0 10px 0; text-align: center;
     color: #ffffffcc; font-size: 13px; letter-spacing: .06em; pointer-events: none;
@@ -28,6 +58,15 @@
 <body>
 <div id="wrap">
   <canvas id="game" width="1000" height="700"></canvas>
+  <div id="pads">
+    <div class="btn" id="b-left">◀</div>
+    <div class="btn" id="b-right">▶</div>
+    <div class="btn" id="b-gas">▲</div>
+    <div class="btn" id="b-brake">▼</div>
+    <div class="btn" id="b-car">C</div>
+    <div class="btn" id="b-reset">R</div>
+    <div class="btn" id="b-menu">T</div>
+  </div>
   <div id="hint">W accelerate · S brake/reverse · A/D steer · C change car · R reset · T track menu</div>
 </div>
 <script>
@@ -850,7 +889,7 @@ function drawMenu() {
 
   ctx.fillStyle = "#ffe066";
   ctx.font = "bold 19px 'Trebuchet MS', sans-serif";
-  ctx.fillText("press W to race", W / 2, 626);
+  ctx.fillText("press W / ▲ to race", W / 2, 626);
 
   ctx.font = "13px 'Trebuchet MS', sans-serif";
   ctx.fillStyle = "#ffffff99";
@@ -904,7 +943,7 @@ function drawHUD() {
     ctx.font = "bold 40px 'Trebuchet MS', sans-serif";
     ctx.fillText(trk.flag + " " + trk.name, W / 2, H / 2 - 40);
     ctx.font = "20px 'Trebuchet MS', sans-serif";
-    ctx.fillText("hit W to launch", W / 2, H / 2 + 6);
+    ctx.fillText("hit W / ▲ to launch", W / 2, H / 2 + 6);
     ctx.font = "15px 'Trebuchet MS', sans-serif";
     ctx.fillStyle = "#ffe066";
     ctx.fillText(trk.corners, W / 2, H / 2 + 40);
@@ -920,6 +959,36 @@ function drawHUD() {
     ctx.textAlign = "left";
   }
 }
+
+// ---------------- touch controls ----------------
+const isTouch = ("ontouchstart" in window) || (typeof navigator !== "undefined" && (navigator.maxTouchPoints || 0) > 0);
+if (isTouch) document.getElementById("wrap").classList.add("touch");
+
+function bindBtn(id, key) {
+  const el = document.getElementById(id);
+  if (!el || typeof KeyboardEvent === "undefined") return;
+  const down = e => { if (e.cancelable) e.preventDefault(); el.classList.add("on"); window.dispatchEvent(new KeyboardEvent("keydown", { key })); };
+  const up = e => { if (e.cancelable) e.preventDefault(); el.classList.remove("on"); window.dispatchEvent(new KeyboardEvent("keyup", { key })); };
+  el.addEventListener("pointerdown", e => { if (el.setPointerCapture) { try { el.setPointerCapture(e.pointerId); } catch (err) {} } down(e); });
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+  el.addEventListener("lostpointercapture", up);
+  el.addEventListener("contextmenu", e => e.preventDefault());
+}
+bindBtn("b-left", "a");
+bindBtn("b-right", "d");
+bindBtn("b-gas", "w");
+bindBtn("b-brake", "s");
+bindBtn("b-car", "c");
+bindBtn("b-reset", "r");
+bindBtn("b-menu", "t");
+
+cvs.addEventListener("pointerdown", e => {
+  if (state === "menu") {
+    if (e.cancelable) e.preventDefault();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" }));
+  }
+});
 
 // ---------------- loop ----------------
 function drawWorld() {
