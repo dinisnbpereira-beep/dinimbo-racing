@@ -230,6 +230,18 @@ let blobs = [];
 let scenery = [];
 let stands = [];
 let curTheme = THEMES.canada;
+
+// ---------------- cars ----------------
+const CARS = [
+  { name: "Yellow",        c1: "#ffe066", c2: "#e6a817", gill: "#ff8fb2" },
+  { name: "Red",           c1: "#ff7a6b", c2: "#c0392b", gill: "#ffb0a6" },
+  { name: "Sky & Silver",  c1: "#a8d8f0", c2: "#c0c8d0", gill: "#5aa8d8" },
+  { name: "Orange",        c1: "#ffa54f", c2: "#e67e22", gill: "#ffcf7a" },
+  { name: "Navy",          c1: "#5a7ade", c2: "#2a4a9e", gill: "#9ab8ff" },
+];
+let carIdx = Math.min(4, Number(localStorage.getItem("dinimbo_car") || 0)) || 0;
+let menuSel = 0;                 // menu row: 0 circuit, 1 car
+function saveCar() { localStorage.setItem("dinimbo_car", carIdx); }
 const cam = { x: WORLD / 2, y: WORLD / 2 };
 
 const car = {
@@ -337,9 +349,18 @@ window.addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
   if (["w","a","s","d","r","t","arrowup","arrowdown","arrowleft","arrowright","enter"," "].includes(k)) e.preventDefault();
   if (state === "menu") {
-    if (k === "a" || k === "arrowleft") { loadTrack((trackIdx + TRACKS.length - 1) % TRACKS.length); }
-    if (k === "d" || k === "arrowright") { loadTrack((trackIdx + 1) % TRACKS.length); }
-    if (k === "w" || k === "arrowup" || k === "enter" || k === " ") { state = "race"; placeAtStart(); }
+    if (k === "arrowup") menuSel = 0;
+    if (k === "arrowdown") menuSel = 1;
+    const left = k === "a" || k === "arrowleft";
+    const right = k === "d" || k === "arrowright";
+    if (menuSel === 0) {
+      if (left) loadTrack((trackIdx + TRACKS.length - 1) % TRACKS.length);
+      if (right) loadTrack((trackIdx + 1) % TRACKS.length);
+    } else {
+      if (left) { carIdx = (carIdx + CARS.length - 1) % CARS.length; saveCar(); }
+      if (right) { carIdx = (carIdx + 1) % CARS.length; saveCar(); }
+    }
+    if (k === "w" || k === "enter" || k === " ") { state = "race"; placeAtStart(); }
     return;
   }
   keys[k] = true;
@@ -613,18 +634,8 @@ function drawTrack() {
   ctx.restore();
 }
 
-function drawCar() {
-  ctx.save();
-  ctx.translate(car.x, car.y);
-
-  ctx.save();
-  ctx.rotate(car.angle);
-  ctx.fillStyle = "rgba(0,0,0,.28)";
-  ctx.beginPath(); ctx.ellipse(0, 3, 19, 10, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-
-  ctx.rotate(car.angle);
-
+function drawCarBody() {
+  const C = CARS[carIdx];
   ctx.fillStyle = "#222";
   ctx.fillRect(-19, -9, 5, 18);
   ctx.fillRect(14, -10, 4, 20);
@@ -632,7 +643,7 @@ function drawCar() {
   ctx.fillRect(-12, -11, 9, 6); ctx.fillRect(-12, 5, 9, 6);
   ctx.fillRect(8, -11, 9, 6); ctx.fillRect(8, 5, 9, 6);
   const bg = ctx.createLinearGradient(0, -6, 0, 6);
-  bg.addColorStop(0, "#ffe066"); bg.addColorStop(1, "#e6a817");
+  bg.addColorStop(0, C.c1); bg.addColorStop(1, C.c2);
   ctx.fillStyle = bg;
   ctx.beginPath();
   ctx.moveTo(-16, -6); ctx.lineTo(6, -7); ctx.lineTo(15, -4);
@@ -640,9 +651,9 @@ function drawCar() {
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = "#2b2b33";
   ctx.beginPath(); ctx.ellipse(-4, 0, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#ffd94d";
+  ctx.fillStyle = C.c1;
   ctx.beginPath(); ctx.arc(-4, 0, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "#ff8fb2"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+  ctx.strokeStyle = C.gill; ctx.lineWidth = 1.6; ctx.lineCap = "round";
   for (const side of [-1, 1]) {
     for (let i = 0; i < 3; i++) {
       const by = -3 + i * 3;
@@ -654,7 +665,31 @@ function drawCar() {
   }
   ctx.fillStyle = "#3a2c00";
   ctx.beginPath(); ctx.arc(-2.6, -1.3, 0.9, 0, Math.PI * 2); ctx.arc(-2.6, 1.3, 0.9, 0, Math.PI * 2); ctx.fill();
+}
 
+function drawCar() {
+  ctx.save();
+  ctx.translate(car.x, car.y);
+
+  ctx.save();
+  ctx.rotate(car.angle);
+  ctx.fillStyle = "rgba(0,0,0,.28)";
+  ctx.beginPath(); ctx.ellipse(0, 3, 19, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.rotate(car.angle);
+  drawCarBody();
+
+  ctx.restore();
+}
+
+function drawCarPreview(x, y, sc) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(sc, sc);
+  ctx.fillStyle = "rgba(0,0,0,.28)";
+  ctx.beginPath(); ctx.ellipse(0, 3, 19, 10, 0, 0, Math.PI * 2); ctx.fill();
+  drawCarBody();
   ctx.restore();
 }
 
@@ -717,18 +752,27 @@ function drawMenu() {
 
   ctx.font = "bold 20px 'Trebuchet MS', sans-serif";
   ctx.fillStyle = "#8ef2a2";
-  ctx.fillText("best lap   " + fmt(car.best), W / 2, 512);
+  ctx.fillText("best lap   " + fmt(car.best), W / 2, 505);
+
+  ctx.font = "bold 17px 'Trebuchet MS', sans-serif";
+  ctx.fillStyle = menuSel === 1 ? "#ffe066" : "#ffffffaa";
+  ctx.fillText("car", W / 2 - 235, 552);
+  drawCarPreview(W / 2 - 175, 546, 1.25);
+  ctx.textAlign = "left";
+  ctx.fillText("◀  ▶   " + CARS[carIdx].name, W / 2 - 130, 552);
+  ctx.textAlign = "center";
 
   ctx.font = "17px 'Trebuchet MS', sans-serif";
-  ctx.fillStyle = "#fff";
-  ctx.fillText("◀  A / D  ▶   switch track", W / 2, 566);
+  ctx.fillStyle = menuSel === 0 ? "#ffe066" : "#ffffffaa";
+  ctx.fillText("◀  ▶   circuit   ·   " + trk.name, W / 2, 592);
+
   ctx.fillStyle = "#ffe066";
   ctx.font = "bold 19px 'Trebuchet MS', sans-serif";
-  ctx.fillText("press W to race", W / 2, 604);
+  ctx.fillText("press W to race", W / 2, 626);
 
   ctx.font = "13px 'Trebuchet MS', sans-serif";
   ctx.fillStyle = "#ffffff99";
-  ctx.fillText("circuit " + (trackIdx + 1) + " / " + TRACKS.length + "   ·   in race: R reset · T menu", W / 2, 650);
+  ctx.fillText("circuit " + (trackIdx + 1) + " / " + TRACKS.length + "   ·   ▲▼ choose row   ·   in race: R reset · T menu", W / 2, 656);
   ctx.textAlign = "left";
 }
 
