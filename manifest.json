@@ -1,6 +1,6 @@
 {
   "name": "Dinimbo Racing",
-  "short_name": "Dinimbo",
+  "short_name": "Dinimbo Racing",
   "description": "Race an axolotl around real F1 circuits - Villeneuve, Portimao, Suzuka, Spa, Sepang, Albert Park and a night race in Singapore.",
   "start_url": "./",
   "scope": "./",
