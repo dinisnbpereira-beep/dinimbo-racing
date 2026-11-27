@@ -37,4 +37,6 @@ On mobile you can tap the menu directly: **tap a flag** to jump to that circuit,
 - 🇹🇷 **Istanbul Park** — famous Turn 8 multi-apex left · long back straight · blind crest at Turn 12
 - 🇪🇸 **Barcelona-Catalunya** — long main straight · Turn 1 Elf · sweeping S3 section · New Chicane
 
+Races are **5 laps** long. When you finish, a podium cutscene shows the top 3 axolotls (in their car colours, with confetti) and the full race result. Press **R** (or tap) to race again, **T** for the menu.
+
 Grass slows you down, so stay on the asphalt. Best lap is saved locally per circuit.

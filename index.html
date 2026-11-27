@@ -90,7 +90,10 @@ const cvs = document.getElementById("game");
 const ctx = cvs.getContext("2d");
 const W = cvs.width, H = cvs.height;
 const TRACK_W = 64;
-const GAME_VERSION = "20";
+const GAME_VERSION = "21";
+const RACE_LAPS = 5;
+let finishOrder = [];
+let podiumT = 0;
 const WORLD = 2000;              // max world dimension of a circuit
 const ZOOM = 1.9;                // follow-camera zoom
 
@@ -449,13 +452,13 @@ const car = {
   x: 0, y: 0, angle: 0, speed: 0,
   nearest: 0, midPassed: false,
   lap: 0, lapTime: 0, lastLap: 0, best: 0,
-  started: false, offTrack: false,
+  started: false, offTrack: false, finished: false,
 };
 const car2 = {
   x: 0, y: 0, angle: 0, speed: 0,
   nearest: 0, midPassed: false,
   lap: 0, lapTime: 0, lastLap: 0, best: 0,
-  started: false, offTrack: false,
+  started: false, offTrack: false, finished: false,
 };
 function p2Idx() { return (carIdx + 1) % CARS.length; }
 let view = { x: 0, y: 0, w: W, h: H, zoom: ZOOM };
@@ -644,6 +647,9 @@ function placeAtStart() {
   car2.best = Number(localStorage.getItem(bestKey(trackIdx, 2)) || 0);
   cam2.x = car2.x; cam2.y = car2.y;
   particles = [];
+  finishOrder = [];
+  car.finished = false;
+  car2.finished = false;
   aiCars = [];
   const used = players === 2 ? [carIdx, p2Idx()] : [carIdx];
   const pool = CARS.map((_, i) => i).filter(i => !used.includes(i));
@@ -658,7 +664,7 @@ function placeAtStart() {
       angle: di, speed: 0,
       nearest: gi, midPassed: false,
       lap: 0, lapTime: 0, lastLap: 0, best: 0,
-      started: false, offTrack: false,
+      started: false, offTrack: false, finished: false,
       idx: pool[k % pool.length],
       skill: 0.93 + Math.random() * 0.09,
       lineOff: side * (4 + Math.random() * 6),
@@ -674,6 +680,11 @@ window.addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
   if (["w","a","s","d","r","t","c","arrowup","arrowdown","arrowleft","arrowright","enter"," "].includes(k)) e.preventDefault();
   if (k === "c") { carIdx = (carIdx + 1) % CARS.length; saveCar(); }
+  if (state === "podium") {
+    if (k === "t" || k === "escape") { state = "menu"; menuSel = 0; placeAtStart(); syncPads(); }
+    else if (k === "r" || k === "w" || k === "enter" || k === " ") { state = "race"; placeAtStart(); syncPads(); }
+    return;
+  }
   if (state === "menu") {
     if (k === "arrowup") menuSel = (menuSel + 3) % 4;
     if (k === "arrowdown") menuSel = (menuSel + 1) % 4;
@@ -827,6 +838,7 @@ function stepCar(c, inp, pNum) {
         c.best = c.lapTime;
         if (pNum === 1 || pNum === 2) localStorage.setItem(bestKey(trackIdx, pNum), c.best);
       }
+      if (c.lap >= RACE_LAPS && !c.finished) { c.finished = true; finishOrder.push(c); }
       c.lapTime = 0;
     }
   }
@@ -836,14 +848,14 @@ function update() {
   if (state !== "race") return;
   const one = players === 1;
 
-  stepCar(car, {
+  stepCar(car, car.finished ? {} : {
     gas: keys["w"] || (one && keys["arrowup"]),
     brake: keys["s"] || (one && keys["arrowdown"]),
     left: keys["a"] || (one && keys["arrowleft"]),
     right: keys["d"] || (one && keys["arrowright"]),
   }, 1);
   if (players === 2) {
-    stepCar(car2, {
+    stepCar(car2, car2.finished ? {} : {
       gas: keys["arrowup"],
       brake: keys["arrowdown"],
       left: keys["arrowleft"],
@@ -852,10 +864,17 @@ function update() {
   }
   const go = car.started || (players === 2 && car2.started);
   for (const a of aiCars) {
-    driveAI(a, go);
+    driveAI(a, go && !a.finished);
     stepCar(a, a.inp, 0);
   }
   collide();
+
+  const humans = players === 2 ? [car, car2] : [car];
+  if (humans.every(h => h.finished)) {
+    state = "podium";
+    podiumT = 0;
+    syncPads();
+  }
 
   cam.x += (car.x - cam.x) * 0.15;
   cam.y += (car.y - cam.y) * 0.15;
@@ -1190,6 +1209,139 @@ function fmt(t) {
   return (m ? m + ":" : "") + s.toFixed(2).padStart(m ? 5 : 2, "0");
 }
 
+function posSuffix(n) {
+  return n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th";
+}
+
+function raceStandings() {
+  const rest = [];
+  const all = players === 2 ? [car, car2].concat(aiCars) : [car].concat(aiCars);
+  for (const c of all) if (!c.finished) rest.push(c);
+  rest.sort((p, q) => racerProg(q) - racerProg(p));
+  return finishOrder.concat(rest);
+}
+
+function entryOf(c) {
+  return {
+    car: c,
+    idx: c === car ? carIdx : c === car2 ? p2Idx() : c.idx,
+    tag: c === car ? (players === 2 ? "P1" : "YOU") : c === car2 ? "P2" : "AI",
+    human: c === car || c === car2,
+  };
+}
+
+function drawAxolotl(x, y, s, idx) {
+  const C = CARS[idx];
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  ctx.fillStyle = "rgba(0,0,0,.3)";
+  ctx.beginPath(); ctx.ellipse(0, 24, 15, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = C.c1;
+  ctx.beginPath(); ctx.ellipse(0, 13, 10, 11, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff3d6";
+  ctx.beginPath(); ctx.ellipse(0, 16, 5.5, 6.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = C.gill; ctx.lineWidth = 3.4; ctx.lineCap = "round";
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(side * 9, -5 + i * 4);
+      ctx.lineTo(side * 18, -9 + i * 6);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = C.c1;
+  ctx.beginPath(); ctx.arc(0, -4, 13, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.25)";
+  ctx.beginPath(); ctx.ellipse(-4, -9, 5, 3, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#2b2340";
+  ctx.beginPath();
+  ctx.arc(-4.6, -5, 1.8, 0, Math.PI * 2);
+  ctx.arc(4.6, -5, 1.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(-4, -5.6, 0.7, 0, Math.PI * 2); ctx.arc(5.2, -5.6, 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#2b2340"; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(0, -1, 3.4, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  ctx.fillStyle = "rgba(255,150,180,.4)";
+  ctx.beginPath(); ctx.arc(-7.5, -1, 2.2, 0, Math.PI * 2); ctx.arc(7.5, -1, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawPodium() {
+  podiumT++;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#0d1524"); g.addColorStop(1, "#1c2d4d");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  const trk = TRACKS[trackIdx];
+  const st = raceStandings().map(entryOf);
+  const champ = st[0];
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 40px 'Comfortaa', sans-serif";
+  ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 8;
+  const title = champ && champ.human ? (players === 2 ? champ.tag + " WINS!" : "YOU WIN!") : "RACE COMPLETE";
+  ctx.fillText(title, W / 2, 78);
+  ctx.font = "17px 'Comfortaa', sans-serif";
+  ctx.fillStyle = "#ffe066";
+  ctx.fillText(trk.flag + " " + trk.name + "   ·   " + RACE_LAPS + " laps", W / 2, 110);
+  ctx.shadowBlur = 0;
+
+  if (!drawPodium.conf) drawPodium.conf = [];
+  const conf = drawPodium.conf;
+  if (conf.length < 90 && podiumT < 120) {
+    for (let i = conf.length; i < 90; i++) conf.push({
+      x: Math.random() * W, y: -20 - Math.random() * H,
+      v: 1.5 + Math.random() * 2.5, r: Math.random() * Math.PI * 2,
+      w: 3 + Math.random() * 4,
+      c: ["#ffe066", "#ff8fb2", "#8ef2a2", "#7ecbff", "#ffa54f", "#fff"][Math.floor(Math.random() * 6)],
+    });
+  }
+  for (const p of conf) {
+    p.y += p.v; p.x += Math.sin(p.r + podiumT * 0.05) * 0.6; p.r += 0.02;
+    if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; }
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+    ctx.fillStyle = p.c;
+    ctx.fillRect(-p.w / 2, -p.w / 4, p.w, p.w / 2);
+    ctx.restore();
+  }
+
+  const pods = [[W / 2, 120, 1], [W / 2 - 150, 84, 2], [W / 2 + 150, 60, 3]];
+  const cols = ["#ffd23e", "#cdd6e0", "#e0995a"];
+  for (const [px, ph, pos] of pods) {
+    const e = st[pos - 1];
+    if (!e) continue;
+    const top = 500 - ph;
+    ctx.fillStyle = "rgba(255,255,255,.09)";
+    ctx.fillRect(px - 62, top, 124, ph);
+    ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.rect(px - 62, top, 124, ph); ctx.stroke();
+    ctx.fillStyle = cols[pos - 1];
+    ctx.fillRect(px - 62, top, 124, 8);
+    ctx.font = "bold 30px 'Comfortaa', sans-serif";
+    ctx.fillText(pos + posSuffix(pos), px, 500 - 22);
+    const hop = Math.sin(podiumT * 0.08 + pos * 2) * (pos === 1 ? 5 : 2.5);
+    drawAxolotl(px, top - 27 + hop, pos === 1 ? 1.45 : 1.2, e.idx);
+    ctx.font = "bold 14px 'Comfortaa', sans-serif";
+    ctx.fillStyle = e.human ? cols[pos - 1] : "#ffffffcc";
+    ctx.fillText((pos === 1 ? "🏆 " : "") + e.tag + " · " + CARS[e.idx].name, px, 524);
+  }
+
+  if (st.length > 3) {
+    const line = st.slice(3).map((e, i) => (i + 4) + posSuffix(i + 4) + " " + e.tag + " " + CARS[e.idx].name).join("   ·   ");
+    ctx.font = "14px 'Comfortaa', sans-serif";
+    ctx.fillStyle = "#ffffffaa";
+    ctx.fillText(line, W / 2, 562);
+  }
+
+  ctx.font = "bold 17px 'Comfortaa', sans-serif";
+  ctx.fillStyle = "#ffe066";
+  ctx.fillText("R / tap — race again   ·   T — menu", W / 2, 610);
+  ctx.textAlign = "left";
+}
+
 function drawTrackPreview(cx, cy, maxW, maxH) {
   let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
   for (const p of samples) {
@@ -1281,7 +1433,7 @@ function drawMenu() {
 
   ctx.fillStyle = "#ffe066";
   ctx.font = "bold 19px 'Comfortaa', sans-serif";
-  ctx.fillText("press W / ▲ to race", W / 2, 666);
+  ctx.fillText("press W / ▲ to race   ·   5 laps", W / 2, 666);
 
   ctx.font = "13px 'Comfortaa', sans-serif";
   ctx.fillStyle = "#ffffff99";
@@ -1297,7 +1449,7 @@ function drawHUDFor(c, ci, pNum, vx, vy, vw, vh) {
   rr(vx + 14, vy + 14, 250, 118, 12); ctx.fill();
   ctx.fillStyle = two ? (pNum === 1 ? "#ffe066" : "#7ecbff") : "#fff";
   ctx.font = "bold 20px 'Comfortaa', sans-serif";
-  ctx.fillText((two ? "P" + pNum + "  " : "") + "LAP " + (c.lap + 1), vx + 30, vy + 44);
+  ctx.fillText((two ? "P" + pNum + "  " : "") + "LAP " + Math.min(c.lap + 1, RACE_LAPS) + " / " + RACE_LAPS, vx + 30, vy + 44);
   ctx.font = "bold 30px 'Comfortaa', sans-serif";
   ctx.fillStyle = "#ffe066";
   ctx.fillText(fmt(c.lapTime), vx + 30, vy + 78);
@@ -1334,7 +1486,19 @@ function drawHUDFor(c, ci, pNum, vx, vy, vw, vh) {
   ctx.fillText(Math.round(Math.abs(c.speed) * 42) + " kph", vx + vw - 77, vy + 48);
   ctx.textAlign = "left";
 
-  if (c.offTrack) {
+  if (c.finished) {
+    ctx.fillStyle = "#8ef2a2";
+    ctx.font = "bold 18px 'Comfortaa', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("FINISHED!", vx + vw / 2, vy + 76);
+    ctx.textAlign = "left";
+  } else if (c.lap === RACE_LAPS - 1) {
+    ctx.fillStyle = "#ffd94d";
+    ctx.font = "bold 18px 'Comfortaa', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("FINAL LAP!", vx + vw / 2, vy + 76);
+    ctx.textAlign = "left";
+  } else if (c.offTrack) {
     ctx.fillStyle = "#ffd94d";
     ctx.font = "bold 18px 'Comfortaa', sans-serif";
     ctx.textAlign = "center";
@@ -1513,6 +1677,8 @@ function frame() {
   if (state === "menu") {
     drawWorld(cam, 0, 0, W, H, ZOOM);
     drawMenu();
+  } else if (state === "podium") {
+    drawPodium();
   } else if (players === 2) {
     drawWorld(cam, 0, 0, W, H / 2, 1.5);
     drawHUDFor(car, carIdx, 1, 0, 0, W, H / 2);
