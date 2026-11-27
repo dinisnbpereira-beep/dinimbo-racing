@@ -84,7 +84,7 @@ const cvs = document.getElementById("game");
 const ctx = cvs.getContext("2d");
 const W = cvs.width, H = cvs.height;
 const TRACK_W = 64;
-const GAME_VERSION = "15";
+const GAME_VERSION = "16";
 const WORLD = 2000;              // max world dimension of a circuit
 const ZOOM = 1.9;                // follow-camera zoom
 
@@ -146,6 +146,26 @@ const THEMES = {
     asphalt: "#2c2c36", kerbA: "#ff8a3d", kerbB: "#ffe9a8", lane: "#ffe9a855",
     flora: "city", night: true, glow: "rgba(255,205,110,.14)",
     towerBodies: ["#2b3242", "#343c50", "#252b3a"],
+  },
+  vegas: {
+    grassA: "#c8a468", grassB: "#bb975a",
+    trunk: "#7a5a34", leaves: ["#4a8a3a", "#5a9a44", "#6bab4f"],
+    walls: "#f0e8d8", roofs: ["#e84f7a", "#7a5ae8", "#3cc8c8", "#f2a33c"],
+    standA: "#e84f7a", standB: "#f2e2c2",
+    asphalt: "#42424a", kerbA: "#d94b4b", kerbB: "#f2f2f2", lane: "#f2f2f266",
+    flora: "neon", night: false,
+    towerBodies: ["#e84f7a", "#7a5ae8", "#f2a33c", "#3cc8c8", "#e8e04f", "#ff6a3c"],
+    density: 110, skip: 0.25, dust: "#c9a86a",
+  },
+  baku: {
+    grassA: "#98999f", grassB: "#8a8b91",
+    trunk: "#5a4a34", leaves: ["#3a6b35", "#477a3f", "#548a49"],
+    walls: "#d9cfc0", roofs: ["#b5533c", "#c9803c", "#a8998a", "#8a6f56", "#c9b8a0"],
+    standA: "#2a7a9e", standB: "#f2f2f2",
+    asphalt: "#3f3f47", kerbA: "#d94b4b", kerbB: "#f2f2f2", lane: "#f2f2f266",
+    flora: "oldcity", night: false,
+    towerBodies: ["#6fb8d8", "#5a9ec8", "#8ac4e0"],
+    density: 110, skip: 0.3, dust: "#8a8b91",
   },
 };
 
@@ -249,6 +269,38 @@ const TRACKS = [
       [166.4,1130.3],[297,1244.1],[353.9,1204],[463.2,704.2],[489.4,635.3],[531.7,595.3],
       [588.3,601.9],[847,765.5],[1400.4,811.3],[1612.6,918],[1882.9,936.6],[1946,908.3],
       [2000,818.1],[1974.7,469.9],
+    ],
+  },
+  {
+    id: "vegas", name: "Las Vegas Strip", flag: "\ud83c\uddfa\ud83c\uddf8",
+    corners: "T1 hairpin · sweep around the Sphere · 1.9 km Strip blast · Harmon finale",
+    theme: "vegas",
+    pts: [
+      [1106.3,1781.4],[1156.9,1712.4],[1152,1657.4],[1112.1,1647.2],
+      [990,1696.3],[940,1697.8],[895.7,1673.9],[857.5,1605],
+      [843.3,826],[855.3,749.1],[886.2,719.2],[1077.1,702.8],
+      [1167.2,648.7],[1196.5,577.1],[1166.2,378.5],[1104.5,350.4],
+      [845.9,338.2],[735.2,314.9],[669.5,266.2],[535.1,51],
+      [436.4,0.3],[362.4,0],[311.2,52.5],[134,382.9],
+      [34,714.4],[14.7,915.8],[0,1697.5],[0.8,1868.7],
+      [14.3,1916.4],[68.5,1966.9],[173.3,2000],[809.1,1995.5],
+      [942.3,1951.7],
+    ],
+  },
+  {
+    id: "baku", name: "Baku Street", flag: "\ud83c\udde6\ud83c\uddff",
+    corners: "2.2 km flat-out straight · tight castle section · Turn 8 hairpin · walls everywhere",
+    theme: "baku",
+    pts: [
+      [1858.1,356.6],[1976.5,296.9],[2000,238.9],[1918.2,43],
+      [1869,0],[1798.6,10.6],[1593.7,90.2],[1191.7,270.7],
+      [1123.6,333.2],[1155,477.8],[1138.8,537.1],[956,642.3],
+      [856.8,780.8],[663.5,929.6],[604.9,942.2],[515.4,804.9],
+      [377.3,731.4],[254.2,770.2],[88.7,864.9],[42.6,928.3],
+      [4.1,1058.7],[0,1195.1],[19.2,1296.8],[71.2,1349.2],
+      [167,1401.6],[264.6,1444.2],[308.7,1444],[344,1417],
+      [433,1282.8],[565.5,1145.7],[640.4,977.4],[850.9,804.3],
+      [995.5,725.6],
     ],
   },
 ];
@@ -394,15 +446,18 @@ function loadTrack(i) {
   }
   scenery = [];
   const clear = TRACK_W / 2 + 55;
-  for (let gx = worldB.minx + 80; gx < worldB.maxx - 80; gx += 150) {
-    for (let gy = worldB.miny + 80; gy < worldB.maxy - 80; gy += 150) {
+  const gstep = curTheme.density || 150, gskip = curTheme.skip ?? 0.5;
+  for (let gx = worldB.minx + 80; gx < worldB.maxx - 80; gx += gstep) {
+    for (let gy = worldB.miny + 80; gy < worldB.maxy - 80; gy += gstep) {
       const x = gx + (Math.random() - .5) * 110, y = gy + (Math.random() - .5) * 110;
       if (distToTrack(x, y) < clear) continue;
       if (inLake(x, y)) continue;
-      if (Math.random() < 0.5) continue;
+      if (Math.random() < gskip) continue;
       const r = Math.random();
       let type;
       if (curTheme.flora === "city") type = r < 0.55 ? "tower" : "palm";
+      else if (curTheme.flora === "neon") type = r < 0.45 ? "tower" : (r < 0.75 ? "palm" : "house");
+      else if (curTheme.flora === "oldcity") type = r < 0.55 ? "house" : (r < 0.72 ? "tree" : (r < 0.92 ? "tower" : "palm"));
       else if (curTheme.flora === "palm") type = r < 0.8 ? "palm" : "house";
       else if (curTheme.flora === "mixed") type = r < 0.4 ? "palm" : (r < 0.85 ? "tree" : "house");
       else type = r < 0.78 ? curTheme.flora : "house";
@@ -436,6 +491,44 @@ function loadTrack(i) {
       x: sx, y: sy,
       a: d + (side < 0 ? Math.PI : 0),
     });
+  }
+  if (TRACKS[i].theme === "vegas") {
+    const R = 130;
+    let placed = false;
+    for (let fr = 0.24; fr <= 0.62 && !placed; fr += 0.02) {
+      const j = Math.round(fr * NS) % NS;
+      const p = samples[j], d = trackDir(j);
+      for (const off of [210, 250, 290, 330]) {
+        for (const side of [-1, 1]) {
+          const sx = p[0] + Math.cos(d + side * Math.PI / 2) * off;
+          const sy = p[1] + Math.sin(d + side * Math.PI / 2) * off;
+          if (distToTrack(sx, sy) > R + 70) {
+            scenery.push({ type: "sphere", x: sx, y: sy, r: R });
+            placed = true;
+            break;
+          }
+        }
+        if (placed) break;
+      }
+    }
+  }
+  if (TRACKS[i].theme === "baku") {
+    let base = null;
+    for (let fr = 0; fr <= 0.12 && !base; fr += 0.015) {
+      const j = Math.round(fr * NS) % NS;
+      const p = samples[j], d = trackDir(j);
+      for (const off of [170, 210, 250, 290]) {
+        const sx1 = p[0] + Math.cos(d + Math.PI / 2) * off, sy1 = p[1] + Math.sin(d + Math.PI / 2) * off;
+        const sx2 = p[0] + Math.cos(d - Math.PI / 2) * off, sy2 = p[1] + Math.sin(d - Math.PI / 2) * off;
+        if (distToTrack(sx1, sy1) > 130) { base = [sx1, sy1]; break; }
+        if (distToTrack(sx2, sy2) > 130) { base = [sx2, sy2]; break; }
+      }
+    }
+    if (base) {
+      scenery.push({ type: "flame", x: base[0] - 60, y: base[1] + 10, w: 32, h: 108, r: -0.08 });
+      scenery.push({ type: "flame", x: base[0], y: base[1], w: 38, h: 138, r: 0.05 });
+      scenery.push({ type: "flame", x: base[0] + 60, y: base[1] + 12, w: 30, h: 96, r: 0.14 });
+    }
   }
   cam.x = samples[0][0]; cam.y = samples[0][1];
   cam2.x = samples[0][0]; cam2.y = samples[0][1];
@@ -532,7 +625,7 @@ function stepCar(c, inp, pNum) {
   const dist = findNearest(c);
   c.offTrack = dist > TRACK_W / 2 + 6;
   if (c.offTrack && Math.abs(c.speed) > 1 && Math.random() < 0.5) {
-    particles.push({ x: c.x, y: c.y, vx: (Math.random() - .5) * 2, vy: (Math.random() - .5) * 2, r: 2 + Math.random() * 3, life: 22, c: "#4c7a3a" });
+    particles.push({ x: c.x, y: c.y, vx: (Math.random() - .5) * 2, vy: (Math.random() - .5) * 2, r: 2 + Math.random() * 3, life: 22, c: curTheme.dust || "#4c7a3a" });
   }
 
   const f = c.nearest / NS;
@@ -736,16 +829,54 @@ function onScreen(x, y, m) {
   return x > view.x - hw && x < view.x + hw && y > view.y - hh && y < view.y + hh;
 }
 
+function drawSphere(o) {
+  ctx.fillStyle = "rgba(255,220,90,.18)";
+  ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 1.25, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffd94d";
+  ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff3b0";
+  ctx.beginPath(); ctx.arc(o.x - o.r * 0.3, o.y - o.r * 0.3, o.r * 0.45, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = "rgba(184,134,11,.5)"; ctx.lineWidth = 2;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath(); ctx.ellipse(o.x, o.y, o.r, o.r * i / 4, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+function drawFlame(o) {
+  ctx.save();
+  ctx.translate(o.x, o.y);
+  ctx.rotate(o.r);
+  ctx.fillStyle = "rgba(0,0,0,.22)";
+  ctx.beginPath(); ctx.ellipse(4, 6, o.w * 0.6, o.w * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+  const w = o.w, h = o.h;
+  const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+  g.addColorStop(0, "#4a9cc8"); g.addColorStop(0.5, "#7fd0ea"); g.addColorStop(1, "#3a86b0");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.3, 0);
+  ctx.quadraticCurveTo(-w * 0.5, -h * 0.45, -w * 0.12, -h * 0.78);
+  ctx.quadraticCurveTo(-w * 0.05, -h * 0.95, w * 0.08, -h);
+  ctx.quadraticCurveTo(w * 0.3, -h * 0.6, w * 0.35, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "#2a6a8e"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+}
+
 function drawSceneryObjects() {
   for (const s of stands) {
     if (onScreen(s.x, s.y, 140)) drawStand(s);
   }
   for (const o of scenery) {
-    if (!onScreen(o.x, o.y, 140)) continue;
+    const m = o.type === "sphere" ? 220 : o.type === "flame" ? 200 : 140;
+    if (!onScreen(o.x, o.y, m)) continue;
     if (o.type === "tree") drawTree(o);
     else if (o.type === "pine") drawPine(o);
     else if (o.type === "palm") drawPalm(o);
     else if (o.type === "tower") drawTower(o);
+    else if (o.type === "sphere") drawSphere(o);
+    else if (o.type === "flame") drawFlame(o);
     else drawHouse(o);
   }
 }

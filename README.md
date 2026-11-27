@@ -27,5 +27,7 @@ In the menu: **▲/▼** choose circuit, car or players, **A/D** change it, **W*
 - 🇲🇾 **Sepang** — two monster straights · giant Turn 1-2 double-hairpin · steamy tropical sweeps
 - 🇦🇺 **Albert Park** — lakeside parkland · fast Turn 1-2 chicane · flat-out sweepers
 - 🇸🇬 **Singapore** — floodlit night streets · Sheares chicane · Turn 13 hairpin · walls everywhere
+- 🇺🇸 **Las Vegas Strip** — T1 hairpin · sweep around the giant yellow Sphere · 1.9 km Strip blast past the neon hotels
+- 🇦🇿 **Baku Street** — 2.2 km flat-out straight · tight medieval castle section · Flame Towers · no grass, all pavement
 
 Grass slows you down, so stay on the asphalt. Best lap is saved locally per circuit.
