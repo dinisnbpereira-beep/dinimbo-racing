@@ -19,7 +19,9 @@ Open it in a browser, or install it as an app: on iPhone/iPad tap Share → Add 
 - **R** — reset to the start line
 - **T** — track menu
 
-In the menu: **▲/▼** choose circuit, car or players, **A/D** change it, **W** start.
+In the menu: **▲/▼** choose circuit, car, players or rivals, **A/D** change it, **W** start.
+
+On mobile, the menu shows extra **▲/▼ buttons** (above the ◀ ▶ pad) for choosing rows — they disappear while racing.
 
 ## Tracks
 - 🇨🇦 **Gilles Villeneuve** — Casino straight · L'Épingle hairpin · Wall of Champions chicane

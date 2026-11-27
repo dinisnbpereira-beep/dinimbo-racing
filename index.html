@@ -54,6 +54,10 @@
   #b-car { right: 16px; top: 80px; width: 44px; height: 44px; font-size: 15px; }
   #b-reset { right: 16px; top: 134px; width: 44px; height: 44px; font-size: 15px; }
   #b-menu { right: 16px; top: 188px; width: 44px; height: 44px; font-size: 15px; }
+  .mbtn { display: none; }
+  #wrap.touch.mmode .mbtn { display: flex; }
+  #b-up { left: 16px; bottom: 112px; width: 58px; height: 58px; font-size: 20px; }
+  #b-down { left: 104px; bottom: 112px; width: 58px; height: 58px; font-size: 20px; }
   #hint {
     position: absolute; inset: auto 0 10px 0; text-align: center;
     color: #ffffffcc; font-size: 13px; letter-spacing: .06em; pointer-events: none;
@@ -72,6 +76,8 @@
     <div class="btn" id="b-car">C</div>
     <div class="btn" id="b-reset">R</div>
     <div class="btn" id="b-menu">T</div>
+    <div class="btn mbtn" id="b-up">▲</div>
+    <div class="btn mbtn" id="b-down">▼</div>
   </div>
   <div id="hint">W accelerate · S brake/reverse · A/D steer · C change car · R reset · T track menu</div>
 </div>
@@ -84,7 +90,7 @@ const cvs = document.getElementById("game");
 const ctx = cvs.getContext("2d");
 const W = cvs.width, H = cvs.height;
 const TRACK_W = 64;
-const GAME_VERSION = "18";
+const GAME_VERSION = "19";
 const WORLD = 2000;              // max world dimension of a circuit
 const ZOOM = 1.9;                // follow-camera zoom
 
@@ -685,12 +691,12 @@ window.addEventListener("keydown", e => {
       if (left) { rivals = (rivals + 4) % 5; saveRivals(); }
       if (right) { rivals = (rivals + 1) % 5; saveRivals(); }
     }
-    if (k === "w" || k === "enter" || k === " ") { state = "race"; placeAtStart(); }
+    if (k === "w" || k === "enter" || k === " ") { state = "race"; placeAtStart(); syncPads(); }
     return;
   }
   keys[k] = true;
   if (k === "r") placeAtStart();
-  if (k === "t" || k === "escape") { state = "menu"; placeAtStart(); }
+  if (k === "t" || k === "escape") { state = "menu"; placeAtStart(); syncPads(); }
 });
 window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
@@ -1383,6 +1389,13 @@ bindBtn("b-brake", "s");
 bindBtn("b-car", "c");
 bindBtn("b-reset", "r");
 bindBtn("b-menu", "t");
+bindBtn("b-up", "arrowup");
+bindBtn("b-down", "arrowdown");
+
+function syncPads() {
+  if (isTouch) document.getElementById("wrap").classList.toggle("mmode", state === "menu");
+}
+syncPads();
 
 cvs.addEventListener("pointerdown", e => {
   if (e.cancelable) e.preventDefault();
