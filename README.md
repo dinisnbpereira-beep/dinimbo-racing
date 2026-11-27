@@ -1,6 +1,6 @@
 # Dinimbo Racing 🏎️🦎
 
-Race an axolotl around 7 real F1 circuits, with layouts traced from the circuits' real GPS geometry — Gilles Villeneuve, Portimão, Suzuka (figure-8!), Spa-Francorchamps, Sepang, Albert Park and a floodlit night race in Singapore. Every circuit has its own scenery theme: maples, palms, pines, or a glittering city skyline with skyscrapers.
+Race an axolotl around 12 real F1 circuits, with layouts traced from the circuits' real GPS geometry — Gilles Villeneuve, Portimão, Suzuka (figure-8!), Spa-Francorchamps, Sepang, Albert Park, a floodlit night race in Singapore, the Las Vegas Strip, Baku, Silverstone, Istanbul Park and Barcelona-Catalunya. Every circuit has its own scenery theme: maples, palms, pines, neon skyscrapers, historic old-town walls or a glittering city skyline.
 
 Pick your car in the menu: Yellow, Red, Sky & Silver, Orange or Navy — each with a matching axolotl driver.
 
@@ -29,5 +29,8 @@ In the menu: **▲/▼** choose circuit, car or players, **A/D** change it, **W*
 - 🇸🇬 **Singapore** — floodlit night streets · Sheares chicane · Turn 13 hairpin · walls everywhere
 - 🇺🇸 **Las Vegas Strip** — T1 hairpin · sweep around the giant yellow Sphere · 1.9 km Strip blast past the neon hotels
 - 🇦🇿 **Baku Street** — 2.2 km flat-out straight · tight medieval castle section · Flame Towers · no grass, all pavement
+- 🇬🇧 **Silverstone** — fast Maggotts–Becketts flicks · Hangar straight · Stowe · Copse · Club
+- 🇹🇷 **Istanbul Park** — famous Turn 8 multi-apex left · long back straight · blind crest at Turn 12
+- 🇪🇸 **Barcelona-Catalunya** — long main straight · Turn 1 Elf · sweeping S3 section · New Chicane
 
 Grass slows you down, so stay on the asphalt. Best lap is saved locally per circuit.
