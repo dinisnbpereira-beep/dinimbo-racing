@@ -6,6 +6,8 @@ Pick your car in the menu: Yellow, Red, Sky & Silver, Orange or Navy — each wi
 
 **2-player split screen**: in the menu choose **players → 2** and race a friend on one computer. Player 1 uses **WASD** (top screen), Player 2 uses the **arrow keys** (bottom screen). Player 2 drives the car after Player 1's pick in the garage.
 
+**AI rivals**: in the menu choose **rivals → 1-4 AI cars** and race against computer drivers. They follow the racing line, brake for corners, wait for you to launch, and can be bumped — your live race position (1st, 2nd, …) shows on the HUD. Works in 1-player and 2-player mode.
+
 ## Play
 Open it in a browser, or install it as an app: on iPhone/iPad tap Share → Add to Home Screen; on Android Chrome tap ⋮ → Install app; on desktop Chrome/Edge use the install icon in the address bar. Works offline once installed.
 

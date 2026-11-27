@@ -84,7 +84,7 @@ const cvs = document.getElementById("game");
 const ctx = cvs.getContext("2d");
 const W = cvs.width, H = cvs.height;
 const TRACK_W = 64;
-const GAME_VERSION = "17";
+const GAME_VERSION = "18";
 const WORLD = 2000;              // max world dimension of a circuit
 const ZOOM = 1.9;                // follow-camera zoom
 
@@ -419,6 +419,7 @@ let lakePath = [];
 let trackPath = null;
 let lastNorm = null;
 let curTheme = THEMES.canada;
+let sampleLen = 3;
 
 // ---------------- cars ----------------
 const CARS = [
@@ -429,9 +430,12 @@ const CARS = [
   { name: "Navy",          c1: "#5a7ade", c2: "#2a4a9e", gill: "#9ab8ff" },
 ];
 let carIdx = Math.min(4, Number(localStorage.getItem("dinimbo_car") || 0)) || 0;
-let menuSel = 0;                 // menu row: 0 circuit, 1 car, 2 players
+let menuSel = 0;                 // menu row: 0 circuit, 1 car, 2 players, 3 rivals
 let players = 1;                 // 1, or 2 = split-screen
+let rivals = Math.max(0, Math.min(4, Number(localStorage.getItem("dinimbo_rivals") || 0)));
+let aiCars = [];
 function saveCar() { localStorage.setItem("dinimbo_car", carIdx); }
+function saveRivals() { localStorage.setItem("dinimbo_rivals", rivals); }
 const cam = { x: WORLD / 2, y: WORLD / 2 };
 const cam2 = { x: WORLD / 2, y: WORLD / 2 };
 
@@ -507,6 +511,12 @@ function loadTrack(i) {
     if (p[0] < worldB.minx) worldB.minx = p[0]; if (p[0] > worldB.maxx) worldB.maxx = p[0];
     if (p[1] < worldB.miny) worldB.miny = p[1]; if (p[1] > worldB.maxy) worldB.maxy = p[1];
   }
+  let per = 0;
+  for (let s = 0; s < NS; s++) {
+    const q = samples[(s + 1) % NS];
+    per += Math.hypot(q[0] - samples[s][0], q[1] - samples[s][1]);
+  }
+  sampleLen = per / NS;
   const M = 500;
   worldB.minx -= M; worldB.miny -= M; worldB.maxx += M; worldB.maxy += M;
   blobs = [];
@@ -628,6 +638,27 @@ function placeAtStart() {
   car2.best = Number(localStorage.getItem(bestKey(trackIdx, 2)) || 0);
   cam2.x = car2.x; cam2.y = car2.y;
   particles = [];
+  aiCars = [];
+  const used = players === 2 ? [carIdx, p2Idx()] : [carIdx];
+  const pool = CARS.map((_, i) => i).filter(i => !used.includes(i));
+  for (let k = 0; k < rivals; k++) {
+    const gi = (NS - 50 - k * 40) % NS;
+    const di = trackDir(gi);
+    const side = k % 2 ? -1 : 1;
+    const off = 14 + Math.floor(k / 2) * 6;
+    aiCars.push({
+      x: samples[gi][0] + Math.cos(di + Math.PI / 2) * off * side,
+      y: samples[gi][1] + Math.sin(di + Math.PI / 2) * off * side,
+      angle: di, speed: 0,
+      nearest: gi, midPassed: false,
+      lap: 0, lapTime: 0, lastLap: 0, best: 0,
+      started: false, offTrack: false,
+      idx: pool[k % pool.length],
+      skill: 0.93 + Math.random() * 0.09,
+      lineOff: side * (4 + Math.random() * 6),
+      inp: { gas: false, brake: false, left: false, right: false },
+    });
+  }
 }
 loadTrack(0);
 
@@ -638,8 +669,8 @@ window.addEventListener("keydown", e => {
   if (["w","a","s","d","r","t","c","arrowup","arrowdown","arrowleft","arrowright","enter"," "].includes(k)) e.preventDefault();
   if (k === "c") { carIdx = (carIdx + 1) % CARS.length; saveCar(); }
   if (state === "menu") {
-    if (k === "arrowup") menuSel = (menuSel + 2) % 3;
-    if (k === "arrowdown") menuSel = (menuSel + 1) % 3;
+    if (k === "arrowup") menuSel = (menuSel + 3) % 4;
+    if (k === "arrowdown") menuSel = (menuSel + 1) % 4;
     const left = k === "a" || k === "arrowleft";
     const right = k === "d" || k === "arrowright";
     if (menuSel === 0) {
@@ -648,8 +679,11 @@ window.addEventListener("keydown", e => {
     } else if (menuSel === 1) {
       if (left) { carIdx = (carIdx + CARS.length - 1) % CARS.length; saveCar(); }
       if (right) { carIdx = (carIdx + 1) % CARS.length; saveCar(); }
-    } else {
+    } else if (menuSel === 2) {
       if (left || right) players = players === 1 ? 2 : 1;
+    } else {
+      if (left) { rivals = (rivals + 4) % 5; saveRivals(); }
+      if (right) { rivals = (rivals + 1) % 5; saveRivals(); }
     }
     if (k === "w" || k === "enter" || k === " ") { state = "race"; placeAtStart(); }
     return;
@@ -671,6 +705,78 @@ function findNearest(c) {
   }
   c.nearest = best;
   return Math.sqrt(bd);
+}
+
+// ---------------- AI rivals ----------------
+function angDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function driveAI(a, go) {
+  a.inp.gas = a.inp.brake = a.inp.left = a.inp.right = false;
+  if (!go) return;
+  let aim = (a.nearest + Math.round(10 + a.speed * 4)) % NS;
+  if ((c_td(a) || 0) > 24) aim = (a.nearest + 6) % NS;
+  const d = trackDir(aim);
+  const tx = samples[aim][0] + Math.cos(d + Math.PI / 2) * a.lineOff;
+  const ty = samples[aim][1] + Math.sin(d + Math.PI / 2) * a.lineOff;
+  const want = angDiff(Math.atan2(ty - a.y, tx - a.x), a.angle);
+  a.inp.left = want < -0.05;
+  a.inp.right = want > 0.05;
+  let target = 7.4 * a.skill;
+  const now = a.nearest;
+  for (let j = 4; j <= 96; j += 4) {
+    const i2 = (now + j) % NS;
+    const dd = Math.abs(angDiff(trackDir((i2 + 4) % NS), trackDir((i2 - 4 + NS) % NS)));
+    const radius = (8 * sampleLen) / Math.max(0.02, dd);
+    const vCorner = Math.min(7.4 * a.skill, 0.046 * radius);
+    const dist = j * sampleLen;
+    const allowed = Math.sqrt(vCorner * vCorner + 2 * 0.25 * dist);
+    if (allowed < target) target = allowed;
+  }
+  const hp = Math.max(racerProg(car), players === 2 ? racerProg(car2) : -1e9);
+  const ap = racerProg(a);
+  if (ap < hp - 0.5) target = Math.min(7.4, target * 1.06);
+  else if (ap > hp + 0.5) target *= 0.96;
+  a.inp.gas = a.speed < target;
+  a.inp.brake = a.speed > target + 0.5;
+}
+
+function c_td(c) { return typeof c.trackDist === "number" ? c.trackDist : 0; }
+
+function racerProg(c) {
+  const f = c.nearest / NS;
+  return c.lap === 0 && f > 0.5 ? f - 1 : c.lap + f;
+}
+
+function raceRank(c) {
+  const all = [car];
+  if (players === 2) all.push(car2);
+  for (const a of aiCars) all.push(a);
+  all.sort((p, q) => racerProg(q) - racerProg(p));
+  return all.indexOf(c) + 1;
+}
+
+function collide() {
+  const all = [car];
+  if (players === 2) all.push(car2);
+  for (const a of aiCars) all.push(a);
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const A = all[i], B = all[j];
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0.01 && d < 19) {
+        const push = (19 - d) / 2, nx = dx / d, ny = dy / d;
+        A.x -= nx * push; A.y -= ny * push;
+        B.x += nx * push; B.y += ny * push;
+        A.speed *= 0.985; B.speed *= 0.985;
+      }
+    }
+  }
 }
 
 // ---------------- update ----------------
@@ -698,6 +804,7 @@ function stepCar(c, inp, pNum) {
 
   const dist = findNearest(c);
   c.offTrack = dist > TRACK_W / 2 + 6;
+  c.trackDist = dist;
   if (c.offTrack && Math.abs(c.speed) > 1 && Math.random() < 0.5) {
     particles.push({ x: c.x, y: c.y, vx: (Math.random() - .5) * 2, vy: (Math.random() - .5) * 2, r: 2 + Math.random() * 3, life: 22, c: curTheme.dust || "#4c7a3a" });
   }
@@ -712,7 +819,7 @@ function stepCar(c, inp, pNum) {
       c.lastLap = c.lapTime;
       if (!c.best || c.lapTime < c.best) {
         c.best = c.lapTime;
-        localStorage.setItem(bestKey(trackIdx, pNum), c.best);
+        if (pNum === 1 || pNum === 2) localStorage.setItem(bestKey(trackIdx, pNum), c.best);
       }
       c.lapTime = 0;
     }
@@ -737,6 +844,12 @@ function update() {
       right: keys["arrowright"],
     }, 2);
   }
+  const go = car.started || (players === 2 && car2.started);
+  for (const a of aiCars) {
+    driveAI(a, go);
+    stepCar(a, a.inp, 0);
+  }
+  collide();
 
   cam.x += (car.x - cam.x) * 0.15;
   cam.y += (car.y - cam.y) * 0.15;
@@ -1154,15 +1267,19 @@ function drawMenu() {
 
   ctx.font = "17px 'Comfortaa', sans-serif";
   ctx.fillStyle = menuSel === 2 ? "#ffe066" : "#ffffffaa";
-  ctx.fillText("◀  ▶   players   ·   " + (players === 1 ? "1 player" : "2 players, split screen"), W / 2, 622);
+  ctx.fillText("◀  ▶   players   ·   " + (players === 1 ? "1 player" : "2 players, split screen"), W / 2, 614);
+
+  ctx.font = "17px 'Comfortaa', sans-serif";
+  ctx.fillStyle = menuSel === 3 ? "#ffe066" : "#ffffffaa";
+  ctx.fillText("◀  ▶   rivals   ·   " + (rivals === 0 ? "off" : rivals + " AI car" + (rivals > 1 ? "s" : "")), W / 2, 642);
 
   ctx.fillStyle = "#ffe066";
   ctx.font = "bold 19px 'Comfortaa', sans-serif";
-  ctx.fillText("press W / ▲ to race", W / 2, 650);
+  ctx.fillText("press W / ▲ to race", W / 2, 666);
 
   ctx.font = "13px 'Comfortaa', sans-serif";
   ctx.fillStyle = "#ffffff99";
-  ctx.fillText("circuit " + (trackIdx + 1) + " / " + TRACKS.length + "   ·   v" + GAME_VERSION + "   ·   ▲▼ choose row" + (players === 2 ? "   ·   P1 WASD · P2 arrows" : "") + "   ·   in race: R reset · T menu", W / 2, 674);
+  ctx.fillText("circuit " + (trackIdx + 1) + " / " + TRACKS.length + "   ·   v" + GAME_VERSION + "   ·   ▲▼ choose row" + (players === 2 ? "   ·   P1 WASD · P2 arrows" : "") + "   ·   in race: R reset · T menu", W / 2, 690);
   ctx.textAlign = "left";
 }
 
@@ -1182,6 +1299,20 @@ function drawHUDFor(c, ci, pNum, vx, vy, vw, vh) {
   ctx.fillStyle = "#ffffffcc";
   ctx.fillText("last  " + fmt(c.lastLap), vx + 30, vy + 104);
   ctx.fillText("best  " + fmt(c.best), vx + 30, vy + 124);
+
+  const tot = (players === 2 ? 2 : 1) + aiCars.length;
+  if (tot > 1) {
+    const pos = raceRank(c);
+    const suf = pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th";
+    ctx.textAlign = "right";
+    ctx.font = "bold 24px 'Comfortaa', sans-serif";
+    ctx.fillStyle = pos === 1 ? "#ffe066" : "#fff";
+    ctx.fillText(pos + suf, vx + 250, vy + 50);
+    ctx.font = "12px 'Comfortaa', sans-serif";
+    ctx.fillStyle = "#ffffffaa";
+    ctx.fillText("pos", vx + 250, vy + 66);
+    ctx.textAlign = "left";
+  }
 
   ctx.textAlign = "center";
   ctx.fillStyle = "rgba(10,15,25,.72)";
@@ -1283,6 +1414,7 @@ function drawWorld(camObj, vx, vy, vw, vh, zoom) {
   }
   ctx.globalAlpha = 1;
   const racers = players === 2 ? [[car, carIdx], [car2, p2Idx()]] : [[car, carIdx]];
+  for (const a of aiCars) racers.push([a, a.idx]);
   if (curTheme.night) {
     for (const [c] of racers) {
       ctx.save();
@@ -1321,11 +1453,13 @@ function drawMinimapFor(c, ci, vx, vy, vw, vh) {
   ctx.fillStyle = "#fff";
   ctx.beginPath(); ctx.arc(s0[0] * sc + ox, s0[1] * sc + oy, 3, 0, Math.PI * 2); ctx.fill();
   const dots = players === 2 ? [[car2, p2Idx()], [car, carIdx]] : [[car, carIdx]];
+  for (const a of aiCars) dots.push([a, a.idx]);
   for (const [cc, cidx] of dots) {
+    const mine = cc === c;
     ctx.fillStyle = CARS[cidx].c1;
-    ctx.beginPath(); ctx.arc(cc.x * sc + ox, cc.y * sc + oy, cc === c ? 5 : 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cc.x * sc + ox, cc.y * sc + oy, mine ? 5 : (aiCars.includes(cc) ? 3.5 : 4), 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "#222"; ctx.lineWidth = 1; ctx.stroke();
-    if (cc === c) {
+    if (mine) {
       ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(cc.x * sc + ox, cc.y * sc + oy, 7, 0, Math.PI * 2); ctx.stroke();
     }
