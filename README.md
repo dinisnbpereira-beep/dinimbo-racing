@@ -21,7 +21,7 @@ Open it in a browser, or install it as an app: on iPhone/iPad tap Share → Add 
 
 In the menu: **▲/▼** choose circuit, car, players or rivals, **A/D** change it, **W** start.
 
-On mobile, the menu shows extra **▲/▼ buttons** (above the ◀ ▶ pad) for choosing rows — they disappear while racing.
+On mobile you can tap the menu directly: **tap a flag** to jump to that circuit, **tap a row** to select it, then **tap the left/right side of the row** to change it (or use the ◀ ▶ pads). Tapping the track preview or the "press W to race" line starts the race. Extra ▲/▼ row buttons appear above the ◀ ▶ pad while in the menu, and disappear while racing.
 
 ## Tracks
 - 🇨🇦 **Gilles Villeneuve** — Casino straight · L'Épingle hairpin · Wall of Champions chicane

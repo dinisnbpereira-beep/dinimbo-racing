@@ -90,7 +90,7 @@ const cvs = document.getElementById("game");
 const ctx = cvs.getContext("2d");
 const W = cvs.width, H = cvs.height;
 const TRACK_W = 64;
-const GAME_VERSION = "19";
+const GAME_VERSION = "20";
 const WORLD = 2000;              // max world dimension of a circuit
 const ZOOM = 1.9;                // follow-camera zoom
 
@@ -696,7 +696,7 @@ window.addEventListener("keydown", e => {
   }
   keys[k] = true;
   if (k === "r") placeAtStart();
-  if (k === "t" || k === "escape") { state = "menu"; placeAtStart(); syncPads(); }
+  if (k === "t" || k === "escape") { state = "menu"; menuSel = 0; placeAtStart(); syncPads(); }
 });
 window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
@@ -1285,7 +1285,7 @@ function drawMenu() {
 
   ctx.font = "13px 'Comfortaa', sans-serif";
   ctx.fillStyle = "#ffffff99";
-  ctx.fillText("circuit " + (trackIdx + 1) + " / " + TRACKS.length + "   ·   v" + GAME_VERSION + "   ·   ▲▼ choose row" + (players === 2 ? "   ·   P1 WASD · P2 arrows" : "") + "   ·   in race: R reset · T menu", W / 2, 690);
+  ctx.fillText("circuit " + (trackIdx + 1) + " / " + TRACKS.length + "   ·   v" + GAME_VERSION + "   ·   " + (isTouch ? "tap rows + flags" : "▲▼ choose row") + (players === 2 ? "   ·   P1 WASD · P2 arrows" : "") + "   ·   in race: R reset · T menu", W / 2, 690);
   ctx.textAlign = "left";
 }
 
@@ -1397,8 +1397,36 @@ function syncPads() {
 }
 syncPads();
 
+function menuTap(e) {
+  const r = cvs.getBoundingClientRect();
+  const x = (e.clientX - r.left) * cvs.width / r.width;
+  const y = (e.clientY - r.top) * cvs.height / r.height;
+  if (y >= 438 && y <= 492) {
+    let best = -1, bd = 34;
+    for (let i = 0; i < TRACKS.length; i++) {
+      const fx = W / 2 + (i - (TRACKS.length - 1) / 2) * 46;
+      const d = Math.abs(fx - x);
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best >= 0 && best !== trackIdx) loadTrack(best);
+    menuSel = 0;
+    return;
+  }
+  const rows = [[530, 570, 1], [571, 602, 0], [603, 628, 2], [629, 655, 3]];
+  for (const [y0, y1, sel] of rows) {
+    if (y >= y0 && y <= y1) {
+      if (menuSel !== sel) menuSel = sel;
+      else if (x < W / 2 - 30) window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
+      else if (x > W / 2 + 30) window.dispatchEvent(new KeyboardEvent("keydown", { key: "d" }));
+      return;
+    }
+  }
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" }));
+}
+
 cvs.addEventListener("pointerdown", e => {
   if (e.cancelable) e.preventDefault();
+  if (state === "menu") { menuTap(e); return; }
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" }));
 });
 cvs.addEventListener("pointerup", () => {
