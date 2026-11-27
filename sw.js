@@ -1,4 +1,4 @@
-const CACHE = "dinimbo-racing-v5";
+const CACHE = "dinimbo-racing-v6";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"];
 
 self.addEventListener("install", e => {

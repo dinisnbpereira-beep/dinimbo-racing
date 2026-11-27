@@ -4,6 +4,8 @@ Race an axolotl around 7 real F1 circuits, with layouts traced from the circuits
 
 Pick your car in the menu: Yellow, Red, Sky & Silver, Orange or Navy — each with a matching axolotl driver.
 
+**2-player split screen**: in the menu choose **players → 2** and race a friend on one computer. Player 1 uses **WASD** (top screen), Player 2 uses the **arrow keys** (bottom screen). Player 2 drives the car after Player 1's pick in the garage.
+
 ## Play
 Open it in a browser, or install it as an app: on iPhone/iPad tap Share → Add to Home Screen; on Android Chrome tap ⋮ → Install app; on desktop Chrome/Edge use the install icon in the address bar. Works offline once installed.
 
@@ -15,7 +17,7 @@ Open it in a browser, or install it as an app: on iPhone/iPad tap Share → Add 
 - **R** — reset to the start line
 - **T** — track menu
 
-In the menu: **▲/▼** choose circuit or car, **A/D** change it, **W** start.
+In the menu: **▲/▼** choose circuit, car or players, **A/D** change it, **W** start.
 
 ## Tracks
 - 🇨🇦 **Gilles Villeneuve** — Casino straight · L'Épingle hairpin · Wall of Champions chicane
